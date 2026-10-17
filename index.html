@@ -1,0 +1,84 @@
+<!doctype html><html lang="vi"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default"><meta name="apple-mobile-web-app-title" content="Từ Vựng">
+<meta name="theme-color" content="#fdf6ff"><link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" href="icon-180.png">
+<title>Từ Vựng</title>
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+:root{--ink:#3d3558;--mint:#bff0dc;--lav:#ddd3fb;--peach:#ffd6c4;--blue:#cfe6ff;--butter:#fff1b8;--pink:#ffd1e1}
+body{margin:0;font-family:ui-rounded,"SF Pro Rounded","Nunito","Varela Round",-apple-system,system-ui,sans-serif;background:linear-gradient(170deg,#fdf6ff 0%,#eef6ff 55%,#fff8ec 100%);color:var(--ink);min-height:100vh;padding:env(safe-area-inset-top) 0 calc(78px + env(safe-area-inset-bottom))}
+header{display:flex;align-items:center;justify-content:space-between;padding:16px 18px}
+h1{font-size:24px;margin:0;font-weight:800}.streak{font-weight:800;font-size:17px;background:var(--peach);padding:6px 14px;border-radius:999px;box-shadow:0 4px 12px #ffb59a55}
+.view{display:none;padding:0 16px;animation:fade .3s}.view.on{display:block}@keyframes fade{from{opacity:0;transform:translateY(6px)}}
+nav{position:fixed;bottom:10px;left:12px;right:12px;display:flex;background:#fffffff2;padding:4px 4px calc(4px + env(safe-area-inset-bottom)/2);border-radius:26px;box-shadow:0 8px 24px #b9a8e055}
+nav button{flex:1;background:none;border:0;color:#8a83a3;padding:8px 0;font:inherit;font-size:12px;font-weight:700;border-radius:20px}nav button.on{color:var(--ink);background:var(--lav)}nav b{display:block;font-size:22px}
+.ringwrap{display:flex;align-items:center;gap:18px;background:#fff;border-radius:28px;padding:16px;margin-bottom:14px;box-shadow:0 8px 24px #c9b8f033}
+.ring{width:96px;height:96px}.sec{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}
+.tile{border-radius:26px;padding:14px 6px;text-align:center;border:0;color:var(--ink);font:inherit;font-size:13px;font-weight:700;box-shadow:0 6px 16px #0000000f;transition:transform .15s}.tile:active{transform:scale(.94)}
+.tile .em{font-size:26px;display:block}.tile .n{font-size:28px;font-weight:900;display:block}
+.learn{background:var(--pink)}.practiced{background:var(--butter)}.learned{background:var(--mint)}
+.big{width:100%;padding:18px;border:0;border-radius:999px;font:inherit;font-size:21px;font-weight:900;background:linear-gradient(90deg,#c9b8ff,#a8d8ff);color:var(--ink);margin:6px 0;box-shadow:0 8px 20px #a8b8ff66;animation:pulse 2.4s infinite}
+@keyframes pulse{50%{transform:scale(1.03)}}
+.card{perspective:1000px;height:50vh;max-height:420px;margin:10px 0 16px;touch-action:pan-y}
+.inner{position:relative;width:100%;height:100%;transition:transform .5s cubic-bezier(.3,1.4,.6,1);transform-style:preserve-3d}
+.card.flip .inner{transform:rotateY(180deg)}
+.face{position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;border-radius:36px;background:#fff;color:var(--ink);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:22px;text-align:center;box-shadow:0 14px 34px #b9a8e044;border:4px solid var(--lav)}
+.back{transform:rotateY(180deg);background:#f4fffa;border-color:var(--mint)}.vi{font-size:36px;font-weight:900}.en{font-size:22px;margin-top:10px;font-weight:600}.ex{font-size:16px;color:#6b6385;margin-top:14px;font-style:italic}
+.tag{position:absolute;top:14px;left:14px;font-size:12px;font-weight:800;padding:5px 12px;border-radius:20px;color:var(--ink)}
+.say{position:absolute;top:10px;right:12px;font-size:24px;background:var(--blue);border:0;border-radius:50%;width:44px;height:44px}
+.hint{color:#9a93b3;font-size:14px;margin-top:18px}
+.grade{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.grade button{border:0;border-radius:24px;padding:15px 4px;font:inherit;font-size:16px;font-weight:800;color:var(--ink);box-shadow:0 6px 14px #0000000f;transition:transform .12s}.grade button:active{transform:scale(.92)}
+.g0{background:var(--pink)}.g1{background:var(--butter)}.g2{background:var(--mint)}
+.card.wig{animation:wig .4s}.card.bnc{animation:bnc .45s}.card.pop{animation:pop .45s}
+@keyframes wig{20%,60%{transform:rotate(-4deg)}40%,80%{transform:rotate(4deg)}}
+@keyframes bnc{40%{transform:translateY(-14px)}70%{transform:translateY(4px)}}
+@keyframes pop{40%{transform:scale(1.07)}}
+.bar{height:12px;background:#fff;border-radius:12px;overflow:hidden;box-shadow:inset 0 1px 3px #0001}.bar i{display:block;height:100%;background:linear-gradient(90deg,#ffc6dd,#c9b8ff,#a8e6cf);border-radius:12px;transition:width .3s}
+input,select{width:100%;padding:13px 16px;border-radius:18px;border:2px solid var(--lav);font:inherit;font-size:17px;margin:5px 0;background:#fff;color:var(--ink)}
+.list .row{display:flex;align-items:center;gap:8px;background:#fff;border-radius:22px;padding:10px 12px;margin:8px 0;box-shadow:0 4px 12px #b9a8e022}
+.row div{flex:1;min-width:0}.row small{color:#6b6385;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row select{width:auto;font-size:13px;padding:6px 8px;border-radius:12px}.row .say{width:38px;height:38px;font-size:18px}
+.tabs{display:flex;gap:6px;margin:8px 0}.tabs button{flex:1;border:0;border-radius:18px;padding:10px 2px;color:var(--ink);font:inherit;opacity:.55;font-weight:800}.tabs button.on{opacity:1;box-shadow:0 4px 12px #0001}
+.empty{text-align:center;padding:30px 10px;color:#6b6385}.empty .e{font-size:54px;display:block;animation:bnc 1.8s infinite}
+.toast{position:fixed;left:50%;top:40%;transform:translate(-50%,-50%) scale(.6);background:#fff;color:var(--ink);border:4px solid var(--butter);padding:18px 26px;border-radius:28px;font-size:22px;font-weight:900;opacity:0;transition:.35s cubic-bezier(.3,1.6,.6,1);pointer-events:none;z-index:9;box-shadow:0 12px 30px #b9a8e055}
+.toast.on{opacity:1;transform:translate(-50%,-50%) scale(1)}
+canvas#cf{position:fixed;inset:0;pointer-events:none;z-index:8}.muted{color:#6b6385;font-size:14px}
+h3{margin:18px 0 6px}
+.btn2{border:0;border-radius:20px;padding:13px;background:var(--blue);color:var(--ink);font:inherit;font-weight:700;font-size:16px;width:100%;margin:5px 0}
+.welcome nav,.welcome header{display:none}.wel{text-align:center;padding:60px 8px 20px}.wem{font-size:56px;animation:bnc 2s infinite}.wel h2{font-size:32px;margin:12px 0 6px}.wel p{font-size:17px;line-height:1.45}
+</style></head><body>
+<header><h1>Từ Vựng 🇻🇳</h1><div class="streak" id="streak">🔥 0</div></header>
+<section class="view" id="v-welcome"><div class="wel"><div class="wem">🌸📚🌈</div><h2>Chào Jamie!</h2><p>Your pastel flashcard garden is ready. Load your private word list to plant the first seeds 🌱</p>
+ <button class="big" id="seedBtn">📂 Load my word list</button><input type="file" id="seedFile" accept=".json,.csv,application/json,text/csv" hidden>
+ <p class="muted">Accepts my-words.json, a progress backup (.json), or a CSV with front,back,hint,publishedAt. Your words stay on this phone only.</p>
+ <button class="btn2" id="emptyBtn">✏️ Start empty & add words by hand</button></div></section>
+<section class="view" id="v-home">
+ <div class="ringwrap"><svg class="ring" viewBox="0 0 36 36"><circle cx="18" cy="18" r="15.9" fill="none" stroke="#f0eafc" stroke-width="3.5"/><circle id="ringc" cx="18" cy="18" r="15.9" fill="none" stroke="#b8a4ff" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="0 100" transform="rotate(-90 18 18)"/><text id="ringt" x="18" y="21" text-anchor="middle" fill="#3d3558" font-size="8" font-weight="800">0</text></svg>
+ <div><b id="goaltxt">0 / 20 hôm nay</b><div class="muted">Daily goal · <span id="duetxt"></span></div></div></div>
+ <div class="sec" id="tiles"></div>
+ <button class="big" id="startBtn">▶ Luyện tập</button>
+ <p class="muted">Tip: tap the card to flip. Swipe ← didn't know, ↑ kinda, → knew it.</p>
+</section>
+<section class="view" id="v-study">
+ <div class="bar"><i id="pbar" style="width:0"></i></div>
+ <div class="card" id="card"><div class="inner"><div class="face front"><span class="tag" id="tag"></span><button class="say" id="say1">🔊</button><div class="vi" id="fvi"></div><div class="hint">chạm để lật · tap to flip</div></div>
+ <div class="face back"><button class="say" id="say2">🔊</button><div class="vi" id="bvi"></div><div class="en" id="ben"></div><div class="ex" id="bex"></div></div></div></div>
+ <div class="grade"><button class="g0" data-g="0">😵<br>Didn't know</button><button class="g1" data-g="1">🤔<br>Kinda</button><button class="g2" data-g="2">😎<br>Knew it</button></div>
+ <button class="btn2" id="quitBtn">Xong / Done</button>
+</section>
+<section class="view list" id="v-words">
+ <div class="tabs" id="wtabs"><button class="learn on" data-s="learn">To learn</button><button class="practiced" data-s="practiced">Practiced</button><button class="learned" data-s="learned">Learned</button></div>
+ <input id="q" type="search" placeholder="🔎 Tìm từ / search…"><div id="wlist"></div><button class="btn2" id="more">Show more</button>
+</section>
+<section class="view" id="v-more">
+ <h3>➕ Add a word</h3><input id="nvi" placeholder="Tiếng Việt"><input id="nen" placeholder="Meaning"><input id="nex" placeholder="Example (optional)">
+ <button class="big" id="addBtn">Add to “Words to learn”</button>
+ <h3>⚙️ Settings</h3><label class="muted">Daily goal</label><select id="goalSel"><option>10</option><option>20</option><option>30</option><option>50</option></select>
+ <label class="muted">Cards per session</label><select id="sessSel"><option>10</option><option>20</option><option>30</option></select>
+ <h3>💾 Backup</h3><button class="btn2" id="expBtn">Export progress (JSON)</button><button class="btn2" id="impBtn">Import progress / word list</button><input type="file" id="impFile" accept=".json,.csv,application/json,text/csv" hidden>
+ <p class="muted" id="ver"></p>
+</section>
+<nav><button class="on" data-v="home"><b>🏠</b>Home</button><button data-v="study"><b>🃏</b>Practice</button><button data-v="words"><b>📚</b>Words</button><button data-v="more"><b>⚙️</b>More</button></nav>
+<div class="toast" id="toast"></div><canvas id="cf"></canvas>
+<script src="app.js"></script></body></html>
