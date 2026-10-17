@@ -18,7 +18,7 @@ nav button{flex:1;background:none;border:0;color:#8a83a3;padding:8px 0;font:inhe
 .tile{border-radius:26px;padding:14px 6px;text-align:center;border:0;color:var(--ink);font:inherit;font-size:13px;font-weight:700;box-shadow:0 6px 16px #0000000f;transition:transform .15s}.tile:active{transform:scale(.94)}
 .tile .em{font-size:26px;display:block}.tile .n{font-size:28px;font-weight:900;display:block}
 .learn{background:var(--pink)}.practiced{background:var(--butter)}.learned{background:var(--mint)}
-.big{width:100%;padding:18px;border:0;border-radius:999px;font:inherit;font-size:21px;font-weight:900;background:linear-gradient(90deg,#c9b8ff,#a8d8ff);color:var(--ink);margin:6px 0;box-shadow:0 8px 20px #a8b8ff66;animation:pulse 2.4s infinite}
+.big{width:100%;padding:18px;border:0;border-radius:999px;font:inherit;font-size:21px;font-weight:900;background:linear-gradient(90deg,#c9b8ff,#a8d8ff);color:var(--ink);margin:6px 0;box-shadow:0 8px 20px #a8b8ff66;animation:pulse 2.4s 3}
 @keyframes pulse{50%{transform:scale(1.03)}}
 .card{perspective:1000px;height:50vh;max-height:420px;margin:10px 0 16px;touch-action:pan-y}
 .inner{position:relative;width:100%;height:100%;transition:transform .5s cubic-bezier(.3,1.4,.6,1);transform-style:preserve-3d}
@@ -40,19 +40,23 @@ input,select{width:100%;padding:13px 16px;border-radius:18px;border:2px solid va
 .row div{flex:1;min-width:0}.row small{color:#6b6385;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .row select{width:auto;font-size:13px;padding:6px 8px;border-radius:12px}.row .say{width:38px;height:38px;font-size:18px}
 .tabs{display:flex;gap:6px;margin:8px 0}.tabs button{flex:1;border:0;border-radius:18px;padding:10px 2px;color:var(--ink);font:inherit;opacity:.55;font-weight:800}.tabs button.on{opacity:1;box-shadow:0 4px 12px #0001}
-.empty{text-align:center;padding:30px 10px;color:#6b6385}.empty .e{font-size:54px;display:block;animation:bnc 1.8s infinite}
+.empty{text-align:center;padding:30px 10px;color:#6b6385}.empty .e{font-size:54px;display:block;animation:bnc 1.8s 2}
 .toast{position:fixed;left:50%;top:40%;transform:translate(-50%,-50%) scale(.6);background:#fff;color:var(--ink);border:4px solid var(--butter);padding:18px 26px;border-radius:28px;font-size:22px;font-weight:900;opacity:0;transition:.35s cubic-bezier(.3,1.6,.6,1);pointer-events:none;z-index:9;box-shadow:0 12px 30px #b9a8e055}
 .toast.on{opacity:1;transform:translate(-50%,-50%) scale(1)}
 canvas#cf{position:fixed;inset:0;pointer-events:none;z-index:8}.muted{color:#6b6385;font-size:14px}
 h3{margin:18px 0 6px}
 .btn2{border:0;border-radius:20px;padding:13px;background:var(--blue);color:var(--ink);font:inherit;font-weight:700;font-size:16px;width:100%;margin:5px 0}
-.welcome nav,.welcome header{display:none}.wel{text-align:center;padding:60px 8px 20px}.wem{font-size:56px;animation:bnc 2s infinite}.wel h2{font-size:32px;margin:12px 0 6px}.wel p{font-size:17px;line-height:1.45}
+.welcome nav,.welcome header{display:none}.safe *,.safe *::before,.safe *::after{animation:none!important;transition:none!important;box-shadow:none!important}.safe .card .inner{transform-style:flat}.safe .back{transform:none;display:none}.safe .card.flip .inner{transform:none}.safe .card.flip .back{display:flex}.safe .card.flip .front{display:none}
+canvas#cf{display:none}
+.wel{text-align:center;padding:60px 8px 20px}.wem{font-size:56px;animation:bnc 2s 2}.wel h2{font-size:32px;margin:12px 0 6px}.wel p{font-size:17px;line-height:1.45}
 </style></head><body>
 <header><h1>Từ Vựng 🇻🇳</h1><div class="streak" id="streak">🔥 0</div></header>
 <section class="view" id="v-welcome"><div class="wel"><div class="wem">🌸📚🌈</div><h2>Chào Jamie!</h2><p>Your pastel flashcard garden is ready. Load your private word list to plant the first seeds 🌱</p>
  <button class="big" id="seedBtn">📂 Load my word list</button><input type="file" id="seedFile" accept=".json,.csv,application/json,text/csv" hidden>
  <p class="muted">Accepts my-words.json, a progress backup (.json), or a CSV with front,back,hint,publishedAt. Your words stay on this phone only.</p>
  <button class="btn2" id="emptyBtn">✏️ Start empty & add words by hand</button></div></section>
+<section class="view" id="v-recover"><div class="wel"><div class="wem">🛟</div><h2>Oops, let's fix this</h2><p>The app couldn't start with the saved data. Your words are still stored on this phone.</p>
+ <p class="muted" id="recErr"></p><button class="big" id="recExport">💾 Export my data</button><button class="btn2" id="recSafe">🐢 Try safe mode</button><button class="btn2" id="recReset">🧹 Reset (erase progress)</button></div></section>
 <section class="view" id="v-home">
  <div class="ringwrap"><svg class="ring" viewBox="0 0 36 36"><circle cx="18" cy="18" r="15.9" fill="none" stroke="#f0eafc" stroke-width="3.5"/><circle id="ringc" cx="18" cy="18" r="15.9" fill="none" stroke="#b8a4ff" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="0 100" transform="rotate(-90 18 18)"/><text id="ringt" x="18" y="21" text-anchor="middle" fill="#3d3558" font-size="8" font-weight="800">0</text></svg>
  <div><b id="goaltxt">0 / 20 hôm nay</b><div class="muted">Daily goal · <span id="duetxt"></span></div></div></div>
@@ -77,8 +81,8 @@ h3{margin:18px 0 6px}
  <h3>⚙️ Settings</h3><label class="muted">Daily goal</label><select id="goalSel"><option>10</option><option>20</option><option>30</option><option>50</option></select>
  <label class="muted">Cards per session</label><select id="sessSel"><option>10</option><option>20</option><option>30</option></select>
  <h3>💾 Backup</h3><button class="btn2" id="expBtn">Export progress (JSON)</button><button class="btn2" id="impBtn">Import progress / word list</button><input type="file" id="impFile" accept=".json,.csv,application/json,text/csv" hidden>
- <p class="muted" id="ver"></p>
+ <label class="muted" style="display:flex;gap:10px;align-items:center;margin:10px 0"><input type="checkbox" id="safeToggle" style="width:auto"> Safe mode (no animations)</label><p class="muted" id="ver"></p>
 </section>
 <nav><button class="on" data-v="home"><b>🏠</b>Home</button><button data-v="study"><b>🃏</b>Practice</button><button data-v="words"><b>📚</b>Words</button><button data-v="more"><b>⚙️</b>More</button></nav>
 <div class="toast" id="toast"></div><canvas id="cf"></canvas>
-<script src="app.js"></script></body></html>
+<script src="app.js?v=4"></script></body></html>

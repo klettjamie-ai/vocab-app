@@ -5,9 +5,16 @@ const LEARNED_IV0=14*DAY,LEARNED_MAX=120*DAY; // learned: long, doubling
 let S=null,sess=null,tab='learn',shown=60;
 const $=id=>document.getElementById(id);
 const today=()=>new Date().toLocaleDateString('en-CA');
-function save(){localStorage.setItem(KEY,JSON.stringify(S))}
+let saveT=null;function saveNow(){clearTimeout(saveT);saveT=null;try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){console.warn('save failed',e);try{toast('⚠️ Could not save — export a backup')}catch(_){}}}
+function save(){if(!saveT)saveT=setTimeout(saveNow,300)} // debounced
+addEventListener('pagehide',()=>saveT&&saveNow());document.addEventListener('visibilitychange',()=>{if(document.hidden&&saveT)saveNow()});
+const SAFE=/[?&]safe=1/.test(location.search)||localStorage.getItem('tuvung-safe')==='1';if(SAFE)document.documentElement.classList.add('safe');
 function blank(){return {v:1,goal:20,sessN:20,streak:0,lastDay:null,doneDay:today(),doneCount:0,cards:{}}}
-async function load(){const raw=localStorage.getItem(KEY);if(raw)S=JSON.parse(raw)}
+function valid(d){return d&&typeof d==='object'&&d.cards&&typeof d.cards==='object'&&!Array.isArray(d.cards)}
+async function load(){const raw=localStorage.getItem(KEY);if(!raw)return;const d=JSON.parse(raw);if(!valid(d))throw new Error('Saved data is not in the expected format');
+  d.goal=+d.goal||20;d.sessN=+d.sessN||20;d.streak=+d.streak||0;d.doneCount=+d.doneCount||0;
+  for(const k in d.cards){const c=d.cards[k];if(!c||!c.vi){delete d.cards[k];continue}if(!['learn','practiced','learned'].includes(c.s))c.s='learn';c.lv=Math.max(0,Math.min(+c.lv||0,10));c.due=+c.due||0;c.en=c.en||'';}
+  S=d}
 // Box rule: box 0/unseen -> learn, boxes 1-4 -> practiced, 5+ -> learned
 const boxSec=b=>!b?'learn':(b<=4?'practiced':'learned');
 function parseCSV(t){const rows=[];let r=[],f='',q=false;for(let i=0;i<t.length;i++){const ch=t[i];
@@ -85,9 +92,9 @@ const esc=s=>String(s).replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;',
 function speak(t){try{const u=new SpeechSynthesisUtterance(t);u.lang='vi-VN';const v=speechSynthesis.getVoices().find(v=>/^vi/i.test(v.lang));if(v)u.voice=v;u.rate=.85;speechSynthesis.cancel();speechSynthesis.speak(u)}catch(e){toast('No Vietnamese voice')}}
 function toast(m){const t=$('toast');t.textContent=m;t.classList.add('on');clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('on'),1300)}
 function celebrate(m,big=true){toast(m);confetti(big?160:50)}
-function confetti(n){const cv=$('cf'),x=cv.getContext('2d');cv.width=innerWidth;cv.height=innerHeight;const cols=['#ffc6dd','#c9b8ff','#a8e6cf','#a8d8ff','#fff1a8','#ffd6c4'];
+function confetti(n){if(SAFE)return;const cv=$('cf');if(cv._busy)return;cv.style.display='block';const x=cv.getContext('2d');cv.width=innerWidth;cv.height=innerHeight;const cols=['#ffc6dd','#c9b8ff','#a8e6cf','#a8d8ff','#fff1a8','#ffd6c4'];
   const P=Array.from({length:n},()=>({x:cv.width/2,y:cv.height/3,vx:(Math.random()-.5)*14,vy:-Math.random()*12-3,c:cols[Math.random()*6|0],r:Math.random()*6+3,a:Math.random()*6}));let f=0;
-  (function st(){x.clearRect(0,0,cv.width,cv.height);P.forEach(p=>{p.x+=p.vx;p.y+=p.vy;p.vy+=.4;p.a+=.2;x.fillStyle=p.c;x.save();x.translate(p.x,p.y);x.rotate(p.a);x.fillRect(-p.r/2,-p.r/2,p.r,p.r*1.6);x.restore()});if(++f<90)requestAnimationFrame(st);else x.clearRect(0,0,cv.width,cv.height)})()}
+  (function st(){x.clearRect(0,0,cv.width,cv.height);P.forEach(p=>{p.x+=p.vx;p.y+=p.vy;p.vy+=.4;p.a+=.2;x.fillStyle=p.c;x.save();x.translate(p.x,p.y);x.rotate(p.a);x.fillRect(-p.r/2,-p.r/2,p.r,p.r*1.6);x.restore()});if(++f<90)requestAnimationFrame(st);else{x.clearRect(0,0,cv.width,cv.height);cv.width=cv.height=0;cv.style.display='none'}})()}
 function init(){if(inited)return renderHome();inited=true;show('home');
   document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>show(b.dataset.v));
   $('startBtn').onclick=()=>{sess=null;show('study')};$('quitBtn').onclick=()=>{sess=null;show('home')};
@@ -111,8 +118,20 @@ function welcome(){document.body.classList.add('welcome');$('v-welcome').classLi
 async function handleFile(file,fromWelcome){try{const r=importText(await file.text(),file.name);toast(r==='progress'?'Progress restored ✓':('🌸 Loaded '+r+' words'));confetti(120);
   if(fromWelcome){document.body.classList.remove('welcome');$('v-welcome').classList.remove('on');init()}else show('home')}catch(e){toast('Hmm, that file didn\'t work 🙈')}}
 let inited=false;
-load().then(()=>{$('seedFile').onchange=e=>e.target.files[0]&&handleFile(e.target.files[0],true);$('seedBtn').onclick=()=>$('seedFile').click();
-  $('emptyBtn').onclick=()=>{S=blank();save();document.body.classList.remove('welcome');$('v-welcome').classList.remove('on');init();show('more')};
-  S?init():welcome()});
-if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js');
-window.__app={buildQueue,grade,get S(){return S},PRAC_IV,LEARNED_IV0};
+// Crash-loop guard: if the last start never reached "stable", switch to safe mode next time and offer recovery.
+const BOOT='tuvung-boot';let bootN=+(localStorage.getItem(BOOT)||0);
+if(bootN>=3&&!SAFE){localStorage.setItem('tuvung-safe','1');location.replace(location.pathname+'?safe=1');}
+localStorage.setItem(BOOT,String(bootN+1));setTimeout(()=>localStorage.setItem(BOOT,'0'),1500);
+function recovery(err){document.body.classList.add('welcome');document.querySelectorAll('.view').forEach(v=>v.classList.remove('on'));$('v-recover').classList.add('on');
+  $('recErr').textContent=String(err&&err.message||err);
+  $('recExport').onclick=()=>{const raw=localStorage.getItem(KEY)||'',b=new Blob([raw],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='tuvung-rescue-'+today()+'.json';document.body.appendChild(a);a.click()};
+  $('recSafe').onclick=()=>{localStorage.setItem('tuvung-safe','1');location.replace(location.pathname+'?safe=1')};
+  $('recReset').onclick=()=>{if(confirm('Erase all progress on this phone? Export first if unsure.')){localStorage.removeItem(KEY);localStorage.setItem(BOOT,'0');location.replace(location.pathname)}}}
+function boot(){try{
+  $('seedFile').onchange=e=>e.target.files[0]&&handleFile(e.target.files[0],true);$('seedBtn').onclick=()=>$('seedFile').click();
+  $('emptyBtn').onclick=()=>{S=blank();saveNow();document.body.classList.remove('welcome');$('v-welcome').classList.remove('on');init();show('more')};
+  $('safeToggle').checked=SAFE;$('safeToggle').onchange=e=>{localStorage.setItem('tuvung-safe',e.target.checked?'1':'0');location.replace(location.pathname+(e.target.checked?'?safe=1':''))};
+  S?init():welcome()}catch(e){console.error(e);recovery(e)}}
+load().then(boot,e=>{console.error(e);recovery(e)});
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').then(r=>r.update()).catch(()=>{});
+window.__app={saveNow,buildQueue,grade,get S(){return S},PRAC_IV,LEARNED_IV0};
