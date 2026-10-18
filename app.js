@@ -23,18 +23,25 @@ function parseCSV(t){const rows=[];let r=[],f='',q=false;for(let i=0;i<t.length;
   if(f||r.length){r.push(f);rows.push(r)}return rows.filter(x=>x.some(v=>v.trim()))}
 const hid=s=>{let h=0;for(const c of s)h=(h*31+c.codePointAt(0))>>>0;return 'w'+h.toString(36)};
 // Accepts: progress backup {v,cards:{}}, seed [{vi,en,ex,s}], deck {cards:[{front,back,srs}]}, or CSV front,back,hint,publishedAt
-function importText(text,name){const now=Date.now();let words;
+const nkey=s=>String(s||'').normalize('NFC').toLowerCase().replace(/\s+/g,' ').trim();
+// Accepts: progress backup {v,cards:{}}, word file v2 {format,version,words:[]}, seed [{vi,en,ex,s,sent}], deck {cards:[...]}, or CSV front,back,hint,publishedAt.
+// Word lists MERGE into existing progress (matched by id or normalized Vietnamese word): section/SRS kept, sentences & new words added.
+function parseWords(text,name){
   if(/\.csv$/i.test(name)||!/^\s*[\[{]/.test(text)){const rows=parseCSV(text.replace(/^\uFEFF/,''));let h=rows[0].map(x=>x.trim().toLowerCase()),fi=h.indexOf('front'),bi=h.indexOf('back'),hi=h.indexOf('hint');
-    if(fi<0){fi=0;bi=1;hi=2}else rows.shift();const seen=new Set();words=[];
-    rows.forEach(r=>{const vi=(r[fi]||'').trim(),en=(r[bi]||'').trim();const k=vi.toLowerCase();if(!vi||!en||seen.has(k))return;seen.add(k);words.push({id:hid(k),vi,en,ex:(r[hi]||'').trim(),s:'learn'})})}
-  else{const d=JSON.parse(text);
-    if(d&&d.cards&&!Array.isArray(d.cards)){S=d;save();return 'progress'}
-    const arr=Array.isArray(d)?d:(d.cards||[]);
-    words=arr.map(w=>({id:w.id||hid((w.vi||w.front).toLowerCase()),vi:w.vi||w.front,en:w.en||w.back,ex:w.ex||w.example||w.hint||'',s:w.s||boxSec(w.srs&&w.srs.box)})).filter(w=>w.vi&&w.en)}
-  if(!words.length)throw new Error('no words');
-  if(!S)S=blank();let added=0;
-  words.forEach(w=>{if(S.cards[w.id])return;added++;S.cards[w.id]={id:w.id,vi:w.vi,en:w.en,ex:w.ex,s:w.s,lv:w.s==='practiced'?1:0,due:w.s==='learned'?now+LEARNED_IV0:now,seen:0,ok:0,miss:0}});
-  save();return added}
+    if(fi<0){fi=0;bi=1;hi=2}else rows.shift();const seen=new Set(),words=[];
+    rows.forEach(r=>{const vi=(r[fi]||'').trim(),en=(r[bi]||'').trim();const k=nkey(vi);if(!vi||!en||seen.has(k))return;seen.add(k);words.push({id:hid(k),vi,en,ex:(r[hi]||'').trim(),s:'learn'})});return {words}}
+  const d=JSON.parse(text);
+  if(d&&d.cards&&!Array.isArray(d.cards))return {progress:d};
+  const arr=Array.isArray(d)?d:(d.words||d.cards||[]);
+  return {words:arr.map(w=>({id:w.id||hid(nkey(w.vi||w.front)),vi:w.vi||w.front,en:w.en||w.back,ex:w.ex||w.example||w.hint||'',s:w.s||boxSec(w.srs&&w.srs.box),sent:w.sent&&w.sent.vi&&w.sent.blank?w.sent:undefined})).filter(w=>w.vi&&w.en)}}
+function mergeWords(words){const now=Date.now();if(!S)S=blank();const byKey={};for(const id in S.cards)byKey[nkey(S.cards[id].vi)]=id;let added=0,updated=0;
+  words.forEach(w=>{const id=S.cards[w.id]?w.id:byKey[nkey(w.vi)];
+    if(id){const c=S.cards[id];let ch=false;if(w.sent&&JSON.stringify(c.sent)!==JSON.stringify(w.sent)){c.sent=w.sent;ch=true}if(!c.ex&&w.ex){c.ex=w.ex;ch=true}if(ch)updated++;return}
+    added++;S.cards[w.id]={id:w.id,vi:w.vi,en:w.en,ex:w.ex,s:w.s,lv:w.s==='practiced'?1:0,due:w.s==='learned'?now+LEARNED_IV0:now,seen:0,ok:0,miss:0};if(w.sent)S.cards[w.id].sent=w.sent;byKey[nkey(w.vi)]=w.id});
+  saveNow();return {added,updated}}
+function importText(text,name){const r=parseWords(text,name);
+  if(r.progress){if(!valid(r.progress))throw new Error('bad backup');S=r.progress;saveNow();return 'progress'}
+  if(!r.words.length)throw new Error('no words');return mergeWords(r.words)}
 function rollDay(){if(S.doneDay!==today()){S.doneDay=today();S.doneCount=0;save()}}
 const cards=()=>Object.values(S.cards);
 // Build a session queue. Practiced words get priority (short intervals), learned words only when due (long intervals) plus a spot-check.
@@ -70,17 +77,23 @@ function renderHome(){rollDay();const cnt={learn:0,practiced:0,learned:0},now=Da
   document.querySelectorAll('.tile').forEach(t=>t.onclick=()=>{tab=t.dataset.s;show('words')});
   const p=Math.min(100,S.doneCount/S.goal*100);$('ringc').setAttribute('stroke-dasharray',p+' 100');$('ringt').textContent=Math.round(p)+'%';
   $('goaltxt').textContent=`${S.doneCount} / ${S.goal} hôm nay`;$('duetxt').textContent=`${due} due for review`;$('streak').textContent='🔥 '+S.streak;}
-function startSession(){sess={q:buildQueue(S.sessN),i:0,total:0};sess.total=sess.q.length;showCard()}
-function showCard(){const c=sess.q[sess.i];$('card').classList.remove('flip');
+function settings(){S.types=S.types||{flash:true,pick:true,type:true};S.mix=S.mix||'50,25,25';return S}
+function pickType(c){const t=settings().types,m=S.mix.split(',').map(Number);let opts=[['flash',m[0]],['pick',m[1]],['type',m[2]]].filter(([k])=>t[k]&&(k!=='pick'||(c.sent&&c.sent.blank)));
+  if(!opts.length)return 'flash';let r=Math.random()*opts.reduce((s,o)=>s+o[1],0);for(const [k,w] of opts){if((r-=w)<0)return k}return opts[0][0]}
+function startSession(){sess={q:buildQueue(S.sessN).map(c=>({c,t:pickType(c)})),i:0};sess.total=sess.q.length;showCard()}
+const cur=()=>sess&&sess.q[sess.i]&&sess.q[sess.i].c;
+function showCard(){const it=sess.q[sess.i],c=it&&it.c;$('card').classList.remove('flip');sess.done=false;
+  const t=it?it.t:'flash';$('card').hidden=t!=='flash';$('gradeRow').hidden=t!=='flash';$('pickBox').hidden=t!=='pick';$('typeBox').hidden=t!=='type';$('qNext').hidden=true;
   if(!c){celebrate('🎉 Xong rồi! Giỏi quá!');sess=null;return show('home')}
   $('fvi').textContent=$('bvi').textContent=c.vi;$('ben').textContent=c.en;$('bex').textContent=c.ex||'';
-  $('tag').textContent=NAMES[c.s];$('tag').className='tag '+c.s;$('pbar').style.width=(sess.i/sess.q.length*100)+'%'}
-function answer(g){if(!sess)return;const c=sess.q[sess.i];if(!c)return;const cd=$('card');cd.classList.remove('wig','bnc','pop');void cd.offsetWidth;cd.classList.add(['wig','pop','bnc'][g]);grade(c,g);
-  if(g===0)sess.q.splice(Math.min(sess.q.length,sess.i+4),0,c); // missed: see again soon in this session
+  $('tag').textContent=NAMES[c.s];$('tag').className='tag '+c.s;$('pbar').style.width=(sess.i/sess.q.length*100)+'%';if(t==='pick')showPick(c);if(t==='type')showType(c)}
+function answer(g){if(!sess)return;const c=cur();if(!c)return;const cd=$('card');cd.classList.remove('wig','bnc','pop');void cd.offsetWidth;cd.classList.add(['wig','pop','bnc'][g]);record(c,g);sess.i++;showCard()}
+function record(c,g){grade(c,g);
+  if(g===0)sess.q.splice(Math.min(sess.q.length,sess.i+4),0,{c,t:'flash'}); // missed: see again soon in this session
   rollDay();S.doneCount++;
-  if(S.doneCount===S.goal){const y=new Date(Date.now()-DAY).toLocaleDateString('en-CA');S.streak=S.lastDay===y?S.streak+1:(S.lastDay===today()?S.streak:1);S.lastDay=today();celebrate('🔥 Daily goal! Streak '+S.streak)}
+  if(S.doneCount===S.goal){const y=new Date(Date.now()-DAY).toLocaleDateString('en-CA');S.streak=S.lastDay===y?S.streak+1:(S.lastDay===today()?S.streak:1);S.lastDay=today();$('streak').textContent='🔥 '+S.streak;celebrate('🔥 Daily goal! Streak '+S.streak)}
   else if(g===2&&c.s==='learned'&&c.lv===0)celebrate('🌟 Learned: '+c.vi,false);
-  save();sess.i++;showCard()}
+  save()}
 function renderWords(){document.querySelectorAll('#wtabs button').forEach(b=>b.classList.toggle('on',b.dataset.s===tab));
   const q=$('q').value.trim().toLowerCase(),f=s=>s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/g,'d');
   const list=cards().filter(c=>c.s===tab&&(!q||f(c.vi.toLowerCase()).includes(f(q))||c.en.toLowerCase().includes(q)));
@@ -95,11 +108,42 @@ function celebrate(m,big=true){toast(m);confetti(big?160:50)}
 function confetti(n){if(SAFE)return;const cv=$('cf');if(cv._busy)return;cv.style.display='block';const x=cv.getContext('2d');cv.width=innerWidth;cv.height=innerHeight;const cols=['#ffc6dd','#c9b8ff','#a8e6cf','#a8d8ff','#fff1a8','#ffd6c4'];
   const P=Array.from({length:n},()=>({x:cv.width/2,y:cv.height/3,vx:(Math.random()-.5)*14,vy:-Math.random()*12-3,c:cols[Math.random()*6|0],r:Math.random()*6+3,a:Math.random()*6}));let f=0;
   (function st(){x.clearRect(0,0,cv.width,cv.height);P.forEach(p=>{p.x+=p.vx;p.y+=p.vy;p.vy+=.4;p.a+=.2;x.fillStyle=p.c;x.save();x.translate(p.x,p.y);x.rotate(p.a);x.fillRect(-p.r/2,-p.r/2,p.r,p.r*1.6);x.restore()});if(++f<90)requestAnimationFrame(st);else{x.clearRect(0,0,cv.width,cv.height);cv.width=cv.height=0;cv.style.display='none'}})()}
+// ---- new card types
+const plain=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[đĐ]/g,'d').toLowerCase().replace(/\(.*?\)/g,'').replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
+function lev(a,b){const m=a.length,n=b.length;let p=Array.from({length:n+1},(_,j)=>j);for(let i=1;i<=m;i++){const q=[i];for(let j=1;j<=n;j++)q[j]=Math.min(p[j]+1,q[j-1]+1,p[j-1]+(a[i-1]===b[j-1]?0:1));p=q}return p[n]}
+const answers=c=>c.vi.replace(/\(.*?\)/g,'').split(/[\/;,]/).map(s=>s.replace(/\.\.\.|…|\+/g,' ').trim()).filter(s=>s.length>1);
+const sylls=s=>plain(s).split(' ').filter(Boolean).length;
+function distractors(c){const all=cards(),idx=all.indexOf(c),want=sylls(c.sent.blank),bad=new Set([plain(c.sent.blank),...answers(c).map(plain)]);
+  const ok=w=>w!==c&&!/\.\.\.|…|\+|\//.test(w.vi)&&!bad.has(plain(answers(w)[0]||''))&&answers(w)[0];
+  const near=all.slice(Math.max(0,idx-60),idx+60).filter(ok),pool=[...near.filter(w=>sylls(answers(w)[0])===want),...near,...all.filter(w=>ok(w)&&sylls(answers(w)[0])===want)];
+  const out=[];for(const w of pool.sort(()=>Math.random()-.5)){const a=answers(w)[0];if(!out.some(x=>plain(x)===plain(a)))out.push(a);if(out.length===2)break}return out}
+function revealHTML(c,ok){const s=c.sent,hl=esc(s.vi).replace(esc(s.blank),'<b class="hl">'+esc(s.blank)+'</b>');return `${hl} <button class="say" data-say="${esc(s.vi)}">🔊</button><br><small>${esc(s.en||c.en)}</small>`}
+function finishQ(box,g){record(cur(),g);sess.done=true;const b=$(box);b.classList.remove('pop','wig');void b.offsetWidth;b.classList.add(g===2?'pop':'wig');if(g===2)confetti(30);$('qNext').hidden=false;setTimeout(()=>$('qNext').scrollIntoView({block:'center',behavior:SAFE?'auto':'smooth'}),60);
+  document.querySelectorAll('#'+box+' [data-say]').forEach(x=>x.onclick=()=>speak(x.dataset.say))}
+function showPick(c){const s=c.sent;$('pSent').innerHTML=esc(s.vi).replace(esc(s.blank),'<span class="gap">&nbsp;?&nbsp;</span>');$('pRev').hidden=true;
+  const opts=[s.blank,...distractors(c)].sort(()=>Math.random()-.5);
+  $('pOpts').innerHTML=opts.map(o=>`<button data-o="${esc(o)}">${esc(o)}</button>`).join('');
+  $('pOpts').querySelectorAll('button').forEach(b=>b.onclick=()=>{if(sess.done)return;const right=b.dataset.o===s.blank;
+    $('pOpts').querySelectorAll('button').forEach(x=>{x.disabled=true;if(x.dataset.o===s.blank)x.classList.add('ok')});if(!right)b.classList.add('no');
+    const r=$('pRev');r.className='reveal '+(right?'ok':'no');r.innerHTML=(right?'🎉 Đúng rồi! ':'💭 Not quite — ')+'<br>'+revealHTML(c);r.hidden=false;finishQ('pickBox',right?2:0)})}
+function showType(c){sess.hint=false;$('tEn').textContent=c.en;$('tIn').value='';$('tIn').disabled=false;$('tRev').hidden=true;$('tCheck').hidden=false;$('tHint').disabled=$('tShow').disabled=false;setTimeout(()=>{try{$('tIn').focus()}catch(e){}},50)}
+function typeResult(kind){const c=cur(),r=$('tRev'),ans=answers(c);$('tIn').disabled=true;$('tCheck').hidden=true;$('tHint').disabled=$('tShow').disabled=true;
+  const g=kind==='ok'?(sess.hint?1:2):kind==='close'?1:0;
+  const msg={ok:sess.hint?'👍 Đúng rồi (with a hint)':'🎉 Chính xác!',close:'🤏 Gần đúng! Check the spelling:',no:'💭 The answer is:',shown:'👀 The answer is:'}[kind];
+  r.className='reveal '+(kind==='ok'?'ok':kind==='close'?'close':'no');r.innerHTML=`${msg}<br><b class="hl">${esc(c.vi)}</b> <button class="say" data-say="${esc(ans[0]||c.vi)}">🔊</button>`+(c.sent?`<br><small>${esc(c.sent.vi)}</small>`:'');r.hidden=false;finishQ('typeBox',g)}
+function checkType(){if(sess.done)return;const v=plain($('tIn').value);if(!v)return toast('Type your answer ✏️');const ans=answers(cur()).map(plain);
+  if(ans.includes(v))return typeResult('ok');const d=Math.min(...ans.map(a=>lev(v,a)));const tol=Math.max(...ans.map(a=>a.length))>6?2:1;typeResult(d<=tol?'close':'no')}
 function init(){if(inited)return renderHome();inited=true;show('home');
+  $('tCheck').onclick=checkType;$('tIn').addEventListener('keydown',e=>{if(e.key==='Enter')checkType()});
+  $('tHint').onclick=()=>{if(sess.done)return;sess.hint=true;const a=answers(cur())[0]||cur().vi;$('tIn').placeholder='Bắt đầu bằng: '+a[0]+'…';toast('💡 Starts with “'+a[0]+'”')};
+  $('tShow').onclick=()=>{if(!sess.done)typeResult('shown')};$('qNext').onclick=()=>{sess.i++;showCard()};
+  settings();$('tyFlash').checked=S.types.flash;$('tyPick').checked=S.types.pick;$('tyType').checked=S.types.type;$('mixSel').value=S.mix;
+  [['tyFlash','flash'],['tyPick','pick'],['tyType','type']].forEach(([id,k])=>$(id).onchange=e=>{S.types[k]=e.target.checked;if(!S.types.flash&&!S.types.pick&&!S.types.type){S.types.flash=true;$('tyFlash').checked=true}save()});
+  $('mixSel').onchange=e=>{S.mix=e.target.value;save()};
   document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>show(b.dataset.v));
   $('startBtn').onclick=()=>{sess=null;show('study')};$('quitBtn').onclick=()=>{sess=null;show('home')};
   $('card').onclick=e=>{if(e.target.classList.contains('say'))return;$('card').classList.toggle('flip')};
-  $('say1').onclick=$('say2').onclick=()=>sess&&sess.q[sess.i]&&speak(sess.q[sess.i].vi);
+  $('say1').onclick=$('say2').onclick=()=>cur()&&speak(cur().vi);
   document.querySelectorAll('.grade button').forEach(b=>b.onclick=()=>answer(+b.dataset.g));
   let sx,sy;const cd=$('card');cd.addEventListener('touchstart',e=>{sx=e.touches[0].clientX;sy=e.touches[0].clientY},{passive:true});
   cd.addEventListener('touchend',e=>{const dx=e.changedTouches[0].clientX-sx,dy=e.changedTouches[0].clientY-sy;if(Math.abs(dx)>70&&Math.abs(dx)>Math.abs(dy))answer(dx>0?2:0);else if(dy<-70)answer(1)});
@@ -111,11 +155,11 @@ function init(){if(inited)return renderHome();inited=true;show('home');
   $('expBtn').onclick=()=>{const b=new Blob([JSON.stringify(S)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='tuvung-backup-'+today()+'.json';a.click()};
   $('impBtn').onclick=()=>$('impFile').click();
   $('impFile').onchange=e=>e.target.files[0]&&handleFile(e.target.files[0],false);
-  $('ver').textContent='Offline-ready · '+cards().length+' words';
+  $('impBtn').textContent=Object.keys(S.cards).length?'🔄 Update words (keeps your progress)':'📥 Import word list / backup';$('ver').textContent='Offline-ready · '+cards().length+' words';
   renderHome();
 }
 function welcome(){document.body.classList.add('welcome');$('v-welcome').classList.add('on')}
-async function handleFile(file,fromWelcome){try{const r=importText(await file.text(),file.name);toast(r==='progress'?'Progress restored ✓':('🌸 Loaded '+r+' words'));confetti(120);
+async function handleFile(file,fromWelcome){try{if(!fromWelcome&&S&&Object.keys(S.cards).length&&/^\s*\{\s*"v"/.test((await file.slice(0,40).text()))&&!confirm('This is a progress backup and will REPLACE your current progress. Continue?'))return;const r=importText(await file.text(),file.name);toast(r==='progress'?'Progress restored ✓':(`🌸 +${r.added} new · ${r.updated} updated`));confetti(120);
   if(fromWelcome){document.body.classList.remove('welcome');$('v-welcome').classList.remove('on');init()}else show('home')}catch(e){toast('Hmm, that file didn\'t work 🙈')}}
 let inited=false;
 // Crash-loop guard: if the last start never reached "stable", switch to safe mode next time and offer recovery.
@@ -134,4 +178,4 @@ function boot(){try{
   S?init():welcome()}catch(e){console.error(e);recovery(e)}}
 load().then(boot,e=>{console.error(e);recovery(e)});
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').then(r=>r.update()).catch(()=>{});
-window.__app={saveNow,buildQueue,grade,get S(){return S},PRAC_IV,LEARNED_IV0};
+window.__app={saveNow,mergeWords,pickType,plain,lev,buildQueue,grade,get S(){return S},PRAC_IV,LEARNED_IV0};

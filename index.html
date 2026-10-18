@@ -49,6 +49,14 @@ h3{margin:18px 0 6px}
 .welcome nav,.welcome header{display:none}.safe *,.safe *::before,.safe *::after{animation:none!important;transition:none!important;box-shadow:none!important}.safe .card .inner{transform-style:flat}.safe .back{transform:none;display:none}.safe .card.flip .inner{transform:none}.safe .card.flip .back{display:flex}.safe .card.flip .front{display:none}
 canvas#cf{display:none}
 .wel{text-align:center;padding:60px 8px 20px}.wem{font-size:56px;animation:bnc 2s 2}.wel h2{font-size:32px;margin:12px 0 6px}.wel p{font-size:17px;line-height:1.45}
+.qbox{background:#fff;border-radius:32px;padding:20px 18px;margin:12px 0;box-shadow:0 10px 26px #b9a8e033;border:4px solid var(--blue);text-align:center}
+.qlab{font-size:13px;font-weight:800;background:var(--blue);padding:4px 12px;border-radius:20px}.qsent{font-size:23px;font-weight:700;margin:18px 0;line-height:1.45}.qsent .gap{display:inline-block;min-width:70px;border-bottom:3px dashed #b8a4ff;color:#b8a4ff}
+.qen{font-size:26px;font-weight:800;margin:20px 0 12px}.opts{display:grid;gap:10px}.opts button{border:0;border-radius:22px;padding:15px;font:inherit;font-size:19px;font-weight:800;background:var(--lav);color:var(--ink)}
+.opts button.ok,.reveal.ok{background:var(--mint)}.opts button.no,.reveal.no{background:var(--pink)}.reveal.close{background:var(--butter)}.opts button:disabled{opacity:1}
+.reveal{margin-top:14px;border-radius:22px;padding:14px;background:#f6f2ff;font-size:17px;line-height:1.45}.reveal b.hl{background:#fff1b8;border-radius:6px;padding:0 4px}.reveal .say{position:static;display:inline-block;vertical-align:middle;margin-left:6px}
+.trow{display:flex;gap:8px}.types label{display:flex;gap:10px;align-items:center;margin:6px 0}.types input{width:auto}.nopulse{animation:none!important}
+.qbox.pop{animation:pop .45s}.qbox.wig{animation:wig .4s}
+[hidden]{display:none!important}
 </style></head><body>
 <header><h1>Từ Vựng 🇻🇳</h1><div class="streak" id="streak">🔥 0</div></header>
 <section class="view" id="v-welcome"><div class="wel"><div class="wem">🌸📚🌈</div><h2>Chào Jamie!</h2><p>Your pastel flashcard garden is ready. Load your private word list to plant the first seeds 🌱</p>
@@ -68,7 +76,12 @@ canvas#cf{display:none}
  <div class="bar"><i id="pbar" style="width:0"></i></div>
  <div class="card" id="card"><div class="inner"><div class="face front"><span class="tag" id="tag"></span><button class="say" id="say1">🔊</button><div class="vi" id="fvi"></div><div class="hint">chạm để lật · tap to flip</div></div>
  <div class="face back"><button class="say" id="say2">🔊</button><div class="vi" id="bvi"></div><div class="en" id="ben"></div><div class="ex" id="bex"></div></div></div></div>
- <div class="grade"><button class="g0" data-g="0">😵<br>Didn't know</button><button class="g1" data-g="1">🤔<br>Kinda</button><button class="g2" data-g="2">😎<br>Knew it</button></div>
+ <div id="pickBox" class="qbox" hidden><span class="qlab">🧩 Chọn từ đúng · Pick the word</span><div class="qsent" id="pSent"></div><div class="opts" id="pOpts"></div><div class="reveal" id="pRev" hidden></div></div>
+ <div id="typeBox" class="qbox" hidden><span class="qlab">⌨️ Viết bằng tiếng Việt · Type it in Vietnamese</span><div class="qen" id="tEn"></div>
+  <input id="tIn" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Tiếng Việt…"><div class="trow"><button class="btn2" id="tHint">💡 Hint</button><button class="btn2" id="tShow">👀 Show answer</button></div>
+  <button class="big nopulse" id="tCheck">Check ✓</button><div class="reveal" id="tRev" hidden></div></div>
+ <button class="big nopulse" id="qNext" hidden>Tiếp theo →</button>
+ <div class="grade" id="gradeRow"><button class="g0" data-g="0">😵<br>Didn't know</button><button class="g1" data-g="1">🤔<br>Kinda</button><button class="g2" data-g="2">😎<br>Knew it</button></div>
  <button class="btn2" id="quitBtn">Xong / Done</button>
 </section>
 <section class="view list" id="v-words">
@@ -79,10 +92,12 @@ canvas#cf{display:none}
  <h3>➕ Add a word</h3><input id="nvi" placeholder="Tiếng Việt"><input id="nen" placeholder="Meaning"><input id="nex" placeholder="Example (optional)">
  <button class="big" id="addBtn">Add to “Words to learn”</button>
  <h3>⚙️ Settings</h3><label class="muted">Daily goal</label><select id="goalSel"><option>10</option><option>20</option><option>30</option><option>50</option></select>
+ <label class="muted">Card types</label><div class="types"><label><input type="checkbox" id="tyFlash"> 🃏 Flashcards</label><label><input type="checkbox" id="tyPick"> 🧩 Sentence pick</label><label><input type="checkbox" id="tyType"> ⌨️ English → Vietnamese</label></div>
+ <label class="muted">Mix</label><select id="mixSel"><option value="50,25,25">Balanced (50 / 25 / 25)</option><option value="70,15,15">Mostly flashcards (70 / 15 / 15)</option><option value="34,33,33">Even (⅓ each)</option><option value="20,40,40">Mostly quizzes (20 / 40 / 40)</option></select>
  <label class="muted">Cards per session</label><select id="sessSel"><option>10</option><option>20</option><option>30</option></select>
- <h3>💾 Backup</h3><button class="btn2" id="expBtn">Export progress (JSON)</button><button class="btn2" id="impBtn">Import progress / word list</button><input type="file" id="impFile" accept=".json,.csv,application/json,text/csv" hidden>
+ <h3>💾 Backup</h3><button class="btn2" id="expBtn">Export progress (JSON)</button><button class="btn2" id="impBtn">📥 Import word list / backup</button><input type="file" id="impFile" accept=".json,.csv,application/json,text/csv" hidden>
  <label class="muted" style="display:flex;gap:10px;align-items:center;margin:10px 0"><input type="checkbox" id="safeToggle" style="width:auto"> Safe mode (no animations)</label><p class="muted" id="ver"></p>
 </section>
 <nav><button class="on" data-v="home"><b>🏠</b>Home</button><button data-v="study"><b>🃏</b>Practice</button><button data-v="words"><b>📚</b>Words</button><button data-v="more"><b>⚙️</b>More</button></nav>
 <div class="toast" id="toast"></div><canvas id="cf"></canvas>
-<script src="app.js?v=4"></script></body></html>
+<script src="app.js?v=5"></script></body></html>
