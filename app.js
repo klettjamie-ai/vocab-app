@@ -71,12 +71,12 @@ function move(id,s){const c=S.cards[id];c.s=s;c.lv=s==='practiced'?1:0;c.due=Dat
 function show(v){document.querySelectorAll('.view').forEach(e=>e.classList.toggle('on',e.id==='v-'+v));document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));
   if(v==='home')renderHome();if(v==='words')renderWords();if(v==='study'&&!sess)startSession()}
 const EMO={learn:'🌱',practiced:'🌼',learned:'🌈'};const NAMES={learn:'Words to learn',practiced:'Words practiced',learned:'Words learned'};
-function renderHome(){rollDay();const cnt={learn:0,practiced:0,learned:0},now=Date.now();let due=0;
+function renderHome(){rollDay();checkStreak();const cnt={learn:0,practiced:0,learned:0},now=Date.now();let due=0;
   cards().forEach(c=>{cnt[c.s]++;if(c.s!=='learn'&&c.due<=now)due++});
   $('tiles').innerHTML=Object.keys(cnt).map(k=>`<button class="tile ${k}" data-s="${k}"><span class="em">${EMO[k]}</span><span class="n">${cnt[k]}</span>${NAMES[k]}</button>`).join('');
   document.querySelectorAll('.tile').forEach(t=>t.onclick=()=>{tab=t.dataset.s;show('words')});
   const p=Math.min(100,S.doneCount/S.goal*100);$('ringc').setAttribute('stroke-dasharray',p+' 100');$('ringt').textContent=Math.round(p)+'%';
-  $('goaltxt').textContent=`${S.doneCount} / ${S.goal} hôm nay`;$('duetxt').textContent=`${due} due for review`;$('streak').textContent='🔥 '+S.streak;}
+  $('goaltxt').textContent=`${S.doneCount} / ${S.goal} hôm nay`;$('duetxt').textContent=`${due} due for review`;$('streak').textContent='🔥 '+S.streak;try{renderGame()}catch(e){console.warn(e)}}
 function settings(){S.types=S.types||{flash:true,pick:true,type:true};S.mix=S.mix||'50,25,25';return S}
 function pickType(c){const t=settings().types,m=S.mix.split(',').map(Number);let opts=[['flash',m[0]],['pick',m[1]],['type',m[2]]].filter(([k])=>t[k]&&(k!=='pick'||(c.sent&&c.sent.blank)));
   if(!opts.length)return 'flash';let r=Math.random()*opts.reduce((s,o)=>s+o[1],0);for(const [k,w] of opts){if((r-=w)<0)return k}return opts[0][0]}
@@ -91,9 +91,9 @@ function answer(g){if(!sess)return;const c=cur();if(!c)return;const cd=$('card')
 function record(c,g){grade(c,g);
   if(g===0)sess.q.splice(Math.min(sess.q.length,sess.i+4),0,{c,t:'flash'}); // missed: see again soon in this session
   rollDay();S.doneCount++;
-  if(S.doneCount===S.goal){const y=new Date(Date.now()-DAY).toLocaleDateString('en-CA');S.streak=S.lastDay===y?S.streak+1:(S.lastDay===today()?S.streak:1);S.lastDay=today();$('streak').textContent='🔥 '+S.streak;celebrate('🔥 Daily goal! Streak '+S.streak)}
+  if(S.doneCount>=S.goal&&S.lastDay!==today()){const y=new Date(Date.now()-DAY).toLocaleDateString('en-CA');S.streak=S.lastDay===y?S.streak+1:(S.lastDay===today()?S.streak:1);S.lastDay=today();$('streak').textContent='🔥 '+S.streak;celebrate('🔥 Daily goal! Streak '+S.streak)}
   else if(g===2&&c.s==='learned'&&c.lv===0)celebrate('🌟 Learned: '+c.vi,false);
-  save()}
+  reward(g);save()}
 function renderWords(){document.querySelectorAll('#wtabs button').forEach(b=>b.classList.toggle('on',b.dataset.s===tab));
   const q=$('q').value.trim().toLowerCase(),f=s=>s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/g,'d');
   const list=cards().filter(c=>c.s===tab&&(!q||f(c.vi.toLowerCase()).includes(f(q))||c.en.toLowerCase().includes(q)));
@@ -108,6 +108,49 @@ function celebrate(m,big=true){toast(m);confetti(big?160:50)}
 function confetti(n){if(SAFE)return;const cv=$('cf');if(cv._busy)return;cv.style.display='block';const x=cv.getContext('2d');cv.width=innerWidth;cv.height=innerHeight;const cols=['#ffc6dd','#c9b8ff','#a8e6cf','#a8d8ff','#fff1a8','#ffd6c4'];
   const P=Array.from({length:n},()=>({x:cv.width/2,y:cv.height/3,vx:(Math.random()-.5)*14,vy:-Math.random()*12-3,c:cols[Math.random()*6|0],r:Math.random()*6+3,a:Math.random()*6}));let f=0;
   (function st(){x.clearRect(0,0,cv.width,cv.height);P.forEach(p=>{p.x+=p.vx;p.y+=p.vy;p.vy+=.4;p.a+=.2;x.fillStyle=p.c;x.save();x.translate(p.x,p.y);x.rotate(p.a);x.fillRect(-p.r/2,-p.r/2,p.r,p.r*1.6);x.restore()});if(++f<90)requestAnimationFrame(st);else{x.clearRect(0,0,cv.width,cv.height);cv.width=cv.height=0;cv.style.display='none'}})()}
+
+// ---- Rewards & daily habit
+const STICKERS=['🌸','🌷','🌼','🍓','🍑','🦋','🐣','🐰','🧁','🍡','🌈','⭐','🍀','🐱','🍵','🎀','🐼','🌙','🍩','🦄','🐝','🍉','🌻','🐬'];
+const dayKey=d=>d.toLocaleDateString('en-CA');const addDays=(k,n)=>{const d=new Date(k+'T12:00:00');d.setDate(d.getDate()+n);return dayKey(d)};
+const dayDiff=(a,b)=>Math.round((new Date(b+'T12:00:00')-new Date(a+'T12:00:00'))/DAY);
+const BADGES=[['s3','🔥 3-day streak',g=>S.streak>=3],['s7','🔥 7 days',g=>S.streak>=7],['s14','🔥 14 days',g=>S.streak>=14],['s30','🏆 30 days',g=>S.streak>=30],['s50','👑 50 days',g=>S.streak>=50],['s100','💎 100 days',g=>S.streak>=100],
+ ['w10','🌱 10 learned',g=>nLearned()>=10],['w100','🌳 100 learned',g=>nLearned()>=100],['w500','🌲 500 learned',g=>nLearned()>=500],
+ ['a100','✍️ 100 answers',g=>g.total>=100],['a1000','📚 1,000 answers',g=>g.total>=1000],['c10','⚡ 10 combo',g=>g.best>=10],['c25','🌟 25 combo',g=>g.best>=25],['l5','🎓 Level 5',g=>level(g.xp).n>=5],['l10','🎓 Level 10',g=>level(g.xp).n>=10]];
+const nLearned=()=>cards().filter(c=>c.s==='learned').length;
+function G(){S.g=S.g||{xp:0,days:{},freezes:0,badges:[],combo:0,best:0,total:0,sound:false};return S.g}
+function level(xp){let n=1,need=100,acc=0;while(xp>=acc+need){acc+=need;n++;need=100+n*50}return {n,into:xp-acc,need}}
+// On open: missed days use streak freezes if available, otherwise the streak resets (progress is never deleted).
+function checkStreak(){const g=G(),t=today();if(!S.lastDay||S.lastDay>=addDays(t,-1))return 0;const missed=dayDiff(S.lastDay,t)-1;
+  if(missed<=g.freezes){for(let i=1;i<=missed;i++)g.days[addDays(S.lastDay,i)]={frozen:1};g.freezes-=missed;S.lastDay=addDays(t,-1);save();toast('🧊 Streak freeze used ×'+missed);return 0}
+  if(S.streak>0){g.lostStreak=S.streak;S.streak=0;save()}return missed}
+const SAD=['Bạn quên mình rồi à? 🥺','Mình héo hon chờ bạn cả ngày đấy… 🥀','Hôm qua vắng bạn, buồn ghê! 😢','Tưới nước cho mình bằng vài từ mới nhé? 💧'];
+const HAPPY=['Giỏi quá! Mình tươi tỉnh hẳn lên 🌻','Hôm nay chăm thế! 💪','Mình nở hoa rồi nè 🌷','Xong mục tiêu hôm nay, tuyệt vời! 🎉'];
+const pick=a=>a[Math.floor(Math.random()*a.length)];
+function mood(){const g=G(),t=today(),d=g.days[t]||{};if(d.met)return 'happy';if(g.lostStreak&&!d.n)return 'sad';const yest=g.days[addDays(t,-1)];if(S.lastDay&&!yest&&!d.n)return 'sad';return d.n?'ok':'idle'}
+function renderGame(){const g=G(),m=mood(),em={happy:'🌻',ok:'🌷',idle:'🌱',sad:'🥀'}[m];
+  $('mEm').textContent=em;$('mEm').className='mem '+(m==='sad'?'sad':m==='happy'?'happy':'');$('sMasc').textContent=em;
+  $('mMsg').textContent=m==='sad'?(g.lostStreak?`Ôi, chuỗi ${g.lostStreak} ngày mất rồi… ${pick(SAD)}`:pick(SAD)):m==='happy'?pick(HAPPY):m==='ok'?'Tiếp tục nào, bạn đang làm rất tốt! 🌷':'Hôm nay học vài từ nhé? 🌱';
+  $('flame').style.fontSize=(26+Math.min(S.streak,60)*0.7)+'px';$('flame').style.filter=S.streak?'none':'grayscale(1)';
+  $('streakTxt').textContent=`${S.streak}-day streak`;$('freezeTxt').textContent=`🧊 ${g.freezes}/2 freezes`+(S.streak?'':' · start one today!');
+  const L=level(g.xp);$('lvlTxt').textContent=`Level ${L.n} · ${g.xp} XP`;$('xpbar').style.width=(L.into/L.need*100)+'%';$('xpTxt').textContent=`${L.need-L.into} XP to level ${L.n+1}`;
+  const t=today(),first=Object.keys(g.days).filter(k=>g.days[k].n||g.days[k].met).sort()[0]||t;let html='';const start=addDays(t,-(28+(new Date(t+'T12:00:00').getDay()+6)%7));
+  for(let i=0;i<35;i++){const k=addDays(start,i),d=g.days[k]||{};let cls='',txt=+k.slice(8);
+    if(k>t)cls='fut';else if(d.met){cls='met';txt=d.sticker}else if(d.frozen){cls='frz';txt='🧊'}else if(k<t&&k>=first)cls='miss';if(k===t)cls+=' today';html+=`<div class="${cls}" title="${k}">${txt}</div>`}
+  $('cal').innerHTML=html;$('badges').innerHTML=BADGES.map(([id,name])=>`<span class="${g.badges.includes(id)?'':'lock'}">${name}</span>`).join('');
+  $('moreRound').hidden=!(S.doneCount>=S.goal&&g.showMore)}
+function checkBadges(){const g=G();BADGES.forEach(([id,name,f])=>{if(!g.badges.includes(id)&&f(g)){g.badges.push(id);setTimeout(()=>celebrate('🏅 Badge: '+name),900)}})}
+let actx=null;function beep(ok){const g=G();if(!g.sound)return;try{if(navigator.vibrate)navigator.vibrate(ok?20:[30,40,30]);actx=actx||new (window.AudioContext||window.webkitAudioContext)();const o=actx.createOscillator(),v=actx.createGain();o.type='sine';o.frequency.value=ok?880:220;v.gain.value=.08;o.connect(v);v.connect(actx.destination);o.start();if(ok)o.frequency.setValueAtTime(1320,actx.currentTime+.08);o.stop(actx.currentTime+.18)}catch(e){}}
+function reward(g){const G_=G(),t=today();G_.total++;const d=G_.days[t]=G_.days[t]||{};d.n=(d.n||0)+1;
+  if(g===2){G_.combo++;G_.best=Math.max(G_.best,G_.combo)}else G_.combo=0;
+  const mult=G_.combo>=10?3:G_.combo>=5?2:G_.combo>=3?1.5:1,xp=Math.round([1,5,10][g]*mult),before=level(G_.xp).n;G_.xp+=xp;
+  $('combo').textContent=G_.combo>=3?`⚡ ${G_.combo} combo ×${mult}`:'';const xg=$('xpGain');xg.textContent='+'+xp+' XP';xg.classList.add('on');clearTimeout(xg._t);xg._t=setTimeout(()=>xg.classList.remove('on'),700);
+  const sm=$('sMasc');sm.classList.remove('j','s');void sm.offsetWidth;sm.classList.add(g===2?'j':'s');sm.textContent=g===2?'🌻':g===1?'🌷':'🥀';beep(g>0);
+  if(level(G_.xp).n>before)setTimeout(()=>celebrate('🎓 Level '+level(G_.xp).n+'!'),500);
+  if(G_.combo===5||G_.combo===10||G_.combo===25)toast('⚡ '+G_.combo+' in a row!');
+  if(S.doneCount>=S.goal&&!d.met){d.met=1;d.sticker=STICKERS[(dayDiff('2026-01-01',t)%STICKERS.length+STICKERS.length)%STICKERS.length];G_.lostStreak=0;G_.showMore=1;
+    if(S.streak>0&&S.streak%7===0&&G_.freezes<2){G_.freezes++;setTimeout(()=>toast('🧊 Earned a streak freeze!'),1800)}
+    setTimeout(()=>toast('Sticker of the day: '+d.sticker),1400)}
+  checkBadges()}
 // ---- new card types
 const plain=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[đĐ]/g,'d').toLowerCase().replace(/\(.*?\)/g,'').replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
 function lev(a,b){const m=a.length,n=b.length;let p=Array.from({length:n+1},(_,j)=>j);for(let i=1;i<=m;i++){const q=[i];for(let j=1;j<=n;j++)q[j]=Math.min(p[j]+1,q[j-1]+1,p[j-1]+(a[i-1]===b[j-1]?0:1));p=q}return p[n]}
@@ -141,7 +184,7 @@ function init(){if(inited)return renderHome();inited=true;show('home');
   [['tyFlash','flash'],['tyPick','pick'],['tyType','type']].forEach(([id,k])=>$(id).onchange=e=>{S.types[k]=e.target.checked;if(!S.types.flash&&!S.types.pick&&!S.types.type){S.types.flash=true;$('tyFlash').checked=true}save()});
   $('mixSel').onchange=e=>{S.mix=e.target.value;save()};
   document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>show(b.dataset.v));
-  $('startBtn').onclick=()=>{sess=null;show('study')};$('quitBtn').onclick=()=>{sess=null;show('home')};
+  $('startBtn').onclick=()=>{if(S.g)S.g.showMore=0;sess=null;show('study')};$('quitBtn').onclick=()=>{sess=null;show('home')};
   $('card').onclick=e=>{if(e.target.classList.contains('say'))return;$('card').classList.toggle('flip')};
   $('say1').onclick=$('say2').onclick=()=>cur()&&speak(cur().vi);
   document.querySelectorAll('.grade button').forEach(b=>b.onclick=()=>answer(+b.dataset.g));
@@ -151,7 +194,8 @@ function init(){if(inited)return renderHome();inited=true;show('home');
   $('q').oninput=()=>{shown=60;renderWords()};$('more').onclick=()=>{shown+=100;renderWords()};
   $('addBtn').onclick=()=>{const vi=$('nvi').value.trim(),en=$('nen').value.trim();if(!vi||!en)return toast('Need word + meaning');const id='u'+Date.now().toString(36);
     S.cards[id]={id,vi,en,ex:$('nex').value.trim(),s:'learn',lv:0,due:Date.now(),seen:0,ok:0,miss:0,user:1};save();$('nvi').value=$('nen').value=$('nex').value='';celebrate('➕ Added: '+vi,false)};
-  $('goalSel').value=S.goal;$('sessSel').value=S.sessN;$('goalSel').onchange=e=>{S.goal=+e.target.value;save()};$('sessSel').onchange=e=>{S.sessN=+e.target.value;save()};
+  if(![...$('goalSel').options].some(o=>o.value==S.goal))$('goalSel').add(new Option(S.goal+' (custom)',S.goal),$('goalSel').options.length-1);$('goalSel').value=S.goal;$('sndToggle').checked=G().sound;$('sndToggle').onchange=e=>{G().sound=e.target.checked;save();beep(true)};$('sessSel').value=S.sessN;$('goalSel').onchange=e=>{let v=e.target.value;if(v==='custom'){v=parseInt(prompt('Daily goal (cards per day):',S.goal),10);if(!(v>0&&v<=1000)){e.target.value=S.goal;return}if(![...e.target.options].some(o=>o.value==v))e.target.add(new Option(v+' (custom)',v),e.target.options.length-1);e.target.value=v}S.goal=+v;save()};
+  $('moreBtn').onclick=()=>{G().showMore=0;sess=null;show('study')};$('sessSel').onchange=e=>{S.sessN=+e.target.value;save()};
   $('expBtn').onclick=()=>{const b=new Blob([JSON.stringify(S)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='tuvung-backup-'+today()+'.json';a.click()};
   $('impBtn').onclick=()=>$('impFile').click();
   $('impFile').onchange=e=>e.target.files[0]&&handleFile(e.target.files[0],false);
@@ -178,4 +222,4 @@ function boot(){try{
   S?init():welcome()}catch(e){console.error(e);recovery(e)}}
 load().then(boot,e=>{console.error(e);recovery(e)});
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').then(r=>r.update()).catch(()=>{});
-window.__app={saveNow,mergeWords,pickType,plain,lev,buildQueue,grade,get S(){return S},PRAC_IV,LEARNED_IV0};
+window.__app={checkStreak,level,renderHome,saveNow,mergeWords,pickType,plain,lev,buildQueue,grade,get S(){return S},PRAC_IV,LEARNED_IV0};
