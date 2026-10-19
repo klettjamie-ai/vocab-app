@@ -33,7 +33,7 @@ function parseWords(text,name){
   const d=JSON.parse(text);
   if(d&&d.cards&&!Array.isArray(d.cards))return {progress:d};
   const arr=Array.isArray(d)?d:(d.words||d.cards||[]);
-  return {words:arr.map(w=>({id:w.id||hid(nkey(w.vi||w.front)),vi:w.vi||w.front,en:w.en||w.back,ex:w.ex||w.example||w.hint||'',s:w.s||boxSec(w.srs&&w.srs.box),sent:w.sent&&w.sent.vi&&w.sent.blank?w.sent:undefined})).filter(w=>w.vi&&w.en)}}
+  return {grammar:d.grammar&&d.groups?{groups:d.groups,points:d.grammar}:null,words:arr.map(w=>({id:w.id||hid(nkey(w.vi||w.front)),vi:w.vi||w.front,en:w.en||w.back,ex:w.ex||w.example||w.hint||'',s:w.s||boxSec(w.srs&&w.srs.box),sent:w.sent&&w.sent.vi&&w.sent.blank?w.sent:undefined})).filter(w=>w.vi&&w.en)}}
 function mergeWords(words){const now=Date.now();if(!S)S=blank();const byKey={};for(const id in S.cards)byKey[nkey(S.cards[id].vi)]=id;let added=0,updated=0;
   words.forEach(w=>{const id=S.cards[w.id]?w.id:byKey[nkey(w.vi)];
     if(id){const c=S.cards[id];let ch=false;if(w.sent&&JSON.stringify(c.sent)!==JSON.stringify(w.sent)){c.sent=w.sent;ch=true}if(!c.ex&&w.ex){c.ex=w.ex;ch=true}if(ch)updated++;return}
@@ -41,7 +41,10 @@ function mergeWords(words){const now=Date.now();if(!S)S=blank();const byKey={};f
   saveNow();return {added,updated}}
 function importText(text,name){const r=parseWords(text,name);
   if(r.progress){if(!valid(r.progress))throw new Error('bad backup');S=r.progress;saveNow();return 'progress'}
-  if(!r.words.length)throw new Error('no words');return mergeWords(r.words)}
+  if(!r.words.length&&!r.grammar)throw new Error('no words');const res=r.words.length?mergeWords(r.words):{added:0,updated:0};if(r.grammar)res.gram=mergeGrammar(r.grammar);return res}
+// Grammar content is replaced from the file; per-point SRS state (S.gram) is kept.
+function mergeGrammar(gd){if(!S)S=blank();S.gram=S.gram||{};const pts={};let added=0;gd.points.forEach(p=>{pts[p.id]=p;if(!S.gram[p.id]){S.gram[p.id]={id:p.id,s:'learn',lv:0,due:Date.now(),seen:0,ok:0,miss:0};added++}});
+  S.gdata={groups:gd.groups,points:pts};saveNow();return {points:gd.points.length,added}}
 function rollDay(){if(S.doneDay!==today()){S.doneDay=today();S.doneCount=0;save()}}
 const cards=()=>Object.values(S.cards);
 // Build a session queue. Practiced words get priority (short intervals), learned words only when due (long intervals) plus a spot-check.
@@ -69,7 +72,7 @@ function grade(c,g,now=Date.now()){
 function move(id,s){const c=S.cards[id];c.s=s;c.lv=s==='practiced'?1:0;c.due=Date.now()+(s==='learned'?LEARNED_IV0:0);save()}
 // UI
 function show(v){document.querySelectorAll('.view').forEach(e=>e.classList.toggle('on',e.id==='v-'+v));document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));
-  if(v==='home')renderHome();if(v==='words')renderWords();if(v==='study'&&!sess)startSession()}
+  if(v==='home')renderHome();if(v==='words')renderWords();if(v==='gram')renderGram();if(v==='study'&&!sess)startSession()}
 const EMO={learn:'🌱',practiced:'🌼',learned:'🌈'};const NAMES={learn:'Words to learn',practiced:'Words practiced',learned:'Words learned'};
 function renderHome(){rollDay();checkStreak();const cnt={learn:0,practiced:0,learned:0},now=Date.now();let due=0;
   cards().forEach(c=>{cnt[c.s]++;if(c.s!=='learn'&&c.due<=now)due++});
@@ -80,19 +83,28 @@ function renderHome(){rollDay();checkStreak();const cnt={learn:0,practiced:0,lea
 function settings(){S.types=S.types||{flash:true,pick:true,type:true};S.mix=S.mix||'50,25,25';return S}
 function pickType(c){const t=settings().types,m=S.mix.split(',').map(Number);let opts=[['flash',m[0]],['pick',m[1]],['type',m[2]]].filter(([k])=>t[k]&&(k!=='pick'||(c.sent&&c.sent.blank)));
   if(!opts.length)return 'flash';let r=Math.random()*opts.reduce((s,o)=>s+o[1],0);for(const [k,w] of opts){if((r-=w)<0)return k}return opts[0][0]}
-function startSession(){sess={q:buildQueue(S.sessN).map(c=>({c,t:pickType(c)})),i:0};sess.total=sess.q.length;showCard()}
-const cur=()=>sess&&sess.q[sess.i]&&sess.q[sess.i].c;
+const hasGram=()=>S.gdata&&S.gram&&Object.keys(S.gram).length;
+function gramQueue(n,now=Date.now()){if(!hasGram())return [];const order=Object.keys(S.gdata.points),all=order.map(id=>S.gram[id]).filter(Boolean);
+  const prac=all.filter(x=>x.s==='practiced'&&x.due<=now).sort((a,b)=>a.due-b.due),lrn=all.filter(x=>x.s==='learned'&&x.due<=now),neu=all.filter(x=>x.s==='learn');
+  const q=[],take=(arr,k)=>{while(k-->0&&arr.length&&q.length<n)q.push(arr.shift())};take(prac,Math.ceil(n*.6));take(lrn,Math.ceil(n*.2));take(neu,n);take(prac,n);take(lrn,n);return q}
+const gType=()=>['choose','fill','reorder','build'][Math.random()*4|0];
+function startSession(mode){const n=S.sessN,gm=mode==='gram'?n:(hasGram()?Math.round(n*(S.gmix==null?20:S.gmix)/100):0);
+  const gq=gramQueue(gm).map(x=>({g:x.id,t:gType()})),wq=mode==='gram'?[]:buildQueue(n-gq.length).map(c=>({c,t:pickType(c)}));
+  const q=wq.slice();gq.forEach((it,i)=>q.splice(Math.floor((i+1)*q.length/(gq.length+1))+i,0,it));
+  sess={q,i:0,mode};sess.total=q.length;showCard()}
+const cur=()=>sess&&sess.q[sess.i]&&(sess.q[sess.i].c||(sess.q[sess.i].g&&S.gram[sess.q[sess.i].g]));
 function showCard(){const it=sess.q[sess.i],c=it&&it.c;$('card').classList.remove('flip');sess.done=false;
-  const t=it?it.t:'flash';$('card').hidden=t!=='flash';$('gradeRow').hidden=t!=='flash';$('pickBox').hidden=t!=='pick';$('typeBox').hidden=t!=='type';$('qNext').hidden=true;
+  const t=it?(it.g?'gram':it.t):'flash';$('card').hidden=t!=='flash';$('gradeRow').hidden=t!=='flash';$('pickBox').hidden=t!=='pick';$('typeBox').hidden=t!=='type';$('gramBox').hidden=t!=='gram';$('qNext').hidden=true;
+  if(t==='gram'){$('pbar').style.width=(sess.i/sess.q.length*100)+'%';return showGram(it)}
   if(!c){celebrate('🎉 Xong rồi! Giỏi quá!');sess=null;return show('home')}
   $('fvi').textContent=$('bvi').textContent=c.vi;$('ben').textContent=c.en;$('bex').textContent=c.ex||'';
   $('tag').textContent=NAMES[c.s];$('tag').className='tag '+c.s;$('pbar').style.width=(sess.i/sess.q.length*100)+'%';if(t==='pick')showPick(c);if(t==='type')showType(c)}
 function answer(g){if(!sess)return;const c=cur();if(!c)return;const cd=$('card');cd.classList.remove('wig','bnc','pop');void cd.offsetWidth;cd.classList.add(['wig','pop','bnc'][g]);record(c,g);sess.i++;showCard()}
-function record(c,g){grade(c,g);
-  if(g===0)sess.q.splice(Math.min(sess.q.length,sess.i+4),0,{c,t:'flash'}); // missed: see again soon in this session
+function record(c,g,item){grade(c,g);
+  if(g===0)sess.q.splice(Math.min(sess.q.length,sess.i+4),0,item&&item.g?{g:item.g,t:gType()}:{c,t:'flash'});if(item&&item.g){G().gtotal=(G().gtotal||0)+1} // missed: see again soon in this session
   rollDay();S.doneCount++;
   if(S.doneCount>=S.goal&&S.lastDay!==today()){const y=new Date(Date.now()-DAY).toLocaleDateString('en-CA');S.streak=S.lastDay===y?S.streak+1:(S.lastDay===today()?S.streak:1);S.lastDay=today();$('streak').textContent='🔥 '+S.streak;celebrate('🔥 Daily goal! Streak '+S.streak)}
-  else if(g===2&&c.s==='learned'&&c.lv===0)celebrate('🌟 Learned: '+c.vi,false);
+  else if(g===2&&c.s==='learned'&&c.lv===0)celebrate('🌟 Learned: '+(c.vi||(S.gdata&&S.gdata.points[c.id]||{}).pattern),false);
   reward(g);save()}
 function renderWords(){document.querySelectorAll('#wtabs button').forEach(b=>b.classList.toggle('on',b.dataset.s===tab));
   const q=$('q').value.trim().toLowerCase(),f=s=>s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/g,'d');
@@ -115,7 +127,7 @@ const dayKey=d=>d.toLocaleDateString('en-CA');const addDays=(k,n)=>{const d=new 
 const dayDiff=(a,b)=>Math.round((new Date(b+'T12:00:00')-new Date(a+'T12:00:00'))/DAY);
 const BADGES=[['s3','🔥 3-day streak',g=>S.streak>=3],['s7','🔥 7 days',g=>S.streak>=7],['s14','🔥 14 days',g=>S.streak>=14],['s30','🏆 30 days',g=>S.streak>=30],['s50','👑 50 days',g=>S.streak>=50],['s100','💎 100 days',g=>S.streak>=100],
  ['w10','🌱 10 learned',g=>nLearned()>=10],['w100','🌳 100 learned',g=>nLearned()>=100],['w500','🌲 500 learned',g=>nLearned()>=500],
- ['a100','✍️ 100 answers',g=>g.total>=100],['a1000','📚 1,000 answers',g=>g.total>=1000],['c10','⚡ 10 combo',g=>g.best>=10],['c25','🌟 25 combo',g=>g.best>=25],['l5','🎓 Level 5',g=>level(g.xp).n>=5],['l10','🎓 Level 10',g=>level(g.xp).n>=10]];
+ ['a100','✍️ 100 answers',g=>g.total>=100],['a1000','📚 1,000 answers',g=>g.total>=1000],['c10','⚡ 10 combo',g=>g.best>=10],['c25','🌟 25 combo',g=>g.best>=25],['gr25','📐 25 grammar answers',g=>(g.gtotal||0)>=25],['gr250','📐 250 grammar answers',g=>(g.gtotal||0)>=250],['gl10','📐 10 patterns learned',g=>S.gram&&Object.values(S.gram).filter(x=>x.s==='learned').length>=10],['l5','🎓 Level 5',g=>level(g.xp).n>=5],['l10','🎓 Level 10',g=>level(g.xp).n>=10]];
 const nLearned=()=>cards().filter(c=>c.s==='learned').length;
 function G(){S.g=S.g||{xp:0,days:{},freezes:0,badges:[],combo:0,best:0,total:0,sound:false};return S.g}
 function level(xp){let n=1,need=100,acc=0;while(xp>=acc+need){acc+=need;n++;need=100+n*50}return {n,into:xp-acc,need}}
@@ -151,6 +163,43 @@ function reward(g){const G_=G(),t=today();G_.total++;const d=G_.days[t]=G_.days[
     if(S.streak>0&&S.streak%7===0&&G_.freezes<2){G_.freezes++;setTimeout(()=>toast('🧊 Earned a streak freeze!'),1800)}
     setTimeout(()=>toast('Sticker of the day: '+d.sticker),1400)}
   checkBadges()}
+
+// ---- Grammar exercises (content from the private word file)
+const brk=s=>[...s.matchAll(/\[(.*?)\]/g)].map(m=>m[1]);const clean=s=>s.replace(/\[(.*?)\]/g,'$1');
+function gReveal(p,it,ok,extra){const hl=esc(it.vi).replace(/\[(.*?)\]/g,'<b class="hl">$1</b>');
+  return `${extra||''}<div class="gpat">${esc(p.pattern)}</div><small>${esc(p.explain)}</small><br>${hl} <button class="say" data-say="${esc(clean(it.vi))}">🔊</button><br><small>${esc(it.en)}</small>`}
+function gFinish(g,html,cls){const it=sess.q[sess.i],r=$('gRev');r.className='reveal '+cls;r.innerHTML=html;r.hidden=false;finishQ('gramBox',g,it)}
+function showGram(item){const p=S.gdata.points[item.g],it=p.items[Math.random()*p.items.length|0],b=brk(it.vi);sess.gi={p,it};
+  ['gOpts','gFill','gReo','gBuild','gSelf','gRev'].forEach(id=>$(id).hidden=true);$('gPat').textContent='';$('gPrompt').textContent='';$('gSent').textContent='';
+  let t=item.t;const words=it.vi.replace(/\[(.*?)\]/g,m=>m.replace(/ /g,'\u00a0')).split(' ');if(t==='reorder'&&(words.length<3||words.length>10||/ – /.test(it.vi)))t='choose';
+  $('gLab').textContent={choose:'📐 Chọn mẫu đúng · Pick the pattern',fill:'📐 Điền từ còn thiếu · Fill the gap',reorder:'📐 Sắp xếp câu · Put the words in order',build:'📐 Đặt câu · Build a sentence'}[t];sess.gt=t;
+  if(t==='choose'){const parts=p.distractors.map(d=>d.split(/\s*…\s*/));let full=parts.every(x=>x.length===b.length)&&b.length>1;
+    const right=full?b.join(' … '):b[0];let k=0;$('gSent').innerHTML=esc(it.vi).replace(/\[(.*?)\]/g,(m,x)=>(full||k++===0)?'<span class="gap">&nbsp;?&nbsp;</span>':esc(x));
+    const opts=[right,...parts.map(x=>full?x.join(' … '):x[0])].filter((o,i,arr)=>arr.findIndex(z=>plain(z)===plain(o))===i).sort(()=>Math.random()-.5);
+    $('gOpts').innerHTML=opts.map(o=>`<button data-o="${esc(o)}">${esc(o)}</button>`).join('');$('gOpts').hidden=false;
+    $('gOpts').querySelectorAll('button').forEach(x=>x.onclick=()=>{if(sess.done)return;const ok=x.dataset.o===right;$('gOpts').querySelectorAll('button').forEach(y=>{y.disabled=true;if(y.dataset.o===right)y.classList.add('ok')});if(!ok)x.classList.add('no');
+      gFinish(ok?2:0,gReveal(p,it,ok,ok?'🎉 Đúng rồi!':'💭 Chưa đúng —'),ok?'ok':'no')})}
+  else if(t==='fill'){let k=0;$('gSent').innerHTML=esc(it.vi).replace(/\[(.*?)\]/g,(m,x)=>k++===0?'<span class="gap">&nbsp;?&nbsp;</span>':esc(x));$('gPrompt').textContent=it.en;$('gIn').value='';$('gIn').disabled=false;$('gCheck').hidden=false;$('gFill').hidden=false}
+  else if(t==='reorder'){sess.chips=words.map((w,i)=>({w,i}));sess.ans=[];$('gPrompt').textContent=it.en;let sh=sess.chips.slice();for(let n=0;n<5&&sh.map(x=>x.i).join()===sess.chips.map(x=>x.i).join();n++)sh.sort(()=>Math.random()-.5);sess.pool=sh;renderChips();$('gReo').hidden=false}
+  else{$('gPat').textContent='Mẫu: '+p.pattern;$('gPrompt').textContent='Dùng mẫu này để nói: “'+it.en+'”';$('gTxt').value='';$('gTxt').disabled=false;sess.gshown=0;$('gShow').hidden=false;$('gBuild').hidden=false}}
+function renderChips(){const mk=(arr,cls)=>arr.map((c,j)=>`<button data-j="${j}">${esc(c.w)}</button>`).join('');$('gChips').innerHTML=mk(sess.pool);$('gAns').innerHTML=mk(sess.ans);
+  $('gChips').querySelectorAll('button').forEach(b=>b.onclick=()=>{if(sess.done)return;sess.ans.push(sess.pool.splice(+b.dataset.j,1)[0]);renderChips()});
+  $('gAns').querySelectorAll('button').forEach(b=>b.onclick=()=>{if(sess.done)return;sess.pool.push(sess.ans.splice(+b.dataset.j,1)[0]);renderChips()})}
+function gCheckFill(){if(sess.done)return;const {p,it}=sess.gi,want=plain(brk(it.vi)[0]),v=plain($('gIn').value);if(!v)return toast('Type your answer ✏️');$('gIn').disabled=true;$('gCheck').hidden=true;
+  const k=v===want?'ok':lev(v,want)<=(want.length>6?2:1)?'close':'no';gFinish({ok:2,close:1,no:0}[k],gReveal(p,it,0,{ok:'🎉 Chính xác!',close:'🤏 Gần đúng!',no:'💭 Đáp án:'}[k]+' <b>'+esc(brk(it.vi)[0])+'</b>'),k)}
+function gCheckReo(){if(sess.done)return;if(sess.pool.length)return toast('Use all the words 🧩');const {p,it}=sess.gi,ok=plain(sess.ans.map(c=>c.w).join(' '))===plain(sess.chips.map(c=>c.w).join(' '));
+  gFinish(ok?2:0,gReveal(p,it,ok,ok?'🎉 Đúng rồi!':'💭 Câu đúng là:'),ok?'ok':'no')}
+function gShowModel(){if(sess.done||sess.gshown)return;sess.gshown=1;const {p,it}=sess.gi;$('gShow').hidden=true;$('gTxt').disabled=true;const r=$('gRev');r.className='reveal';r.innerHTML=gReveal(p,it,0,'✍️ Câu mẫu:');r.hidden=false;
+  r.querySelectorAll('[data-say]').forEach(x=>x.onclick=()=>speak(x.dataset.say));$('gSelf').hidden=false}
+function gSelfGrade(g){if(sess.done)return;$('gSelf').hidden=true;$('gTxt').disabled=false;sess.gshown=0;const it=sess.q[sess.i];record(cur(),g,it);sess.done=true;$('qNext').hidden=false;if(g===2)confetti(30)}
+const GS={learn:'To learn',practiced:'Practiced',learned:'Learned'};
+function renderGram(){const el=$('gList');if(!hasGram()){$('gSum').innerHTML='';el.innerHTML='<div class="empty"><span class="e">📐</span><b>No grammar yet</b><br>Go to More → 🔄 Update words and pick your my-words.json (v3).</div>';$('gStart').hidden=true;return}
+  $('gStart').hidden=false;const cnt={learn:0,practiced:0,learned:0};Object.values(S.gram).forEach(x=>cnt[x.s]++);
+  $('gSum').innerHTML=Object.keys(cnt).map(k=>`<div class="${k}">${cnt[k]}<br><small>${GS[k]}</small></div>`).join('');
+  el.innerHTML=S.gdata.groups.map(g=>{const ps=Object.values(S.gdata.points).filter(p=>p.group===g.n),c={learn:0,practiced:0,learned:0};ps.forEach(p=>c[(S.gram[p.id]||{}).s||'learn']++);
+    const bar=['learned','practiced','learn'].map(k=>`<i class="${k}" style="width:${c[k]/ps.length*100}%"></i>`).join('');
+    return `<details class="ggrp"><summary>${g.n}. ${esc(g.title)} <span class="muted">· ${c.learned}/${ps.length} learned</span><div class="gbar">${bar}</div></summary>`+ps.map(p=>`<div class="gpt"><div><b>${esc(p.pattern)}</b><small>${esc(p.explain)}</small></div><select data-g="${p.id}">${Object.keys(GS).map(k=>`<option value="${k}"${(S.gram[p.id]||{}).s===k?' selected':''}>${GS[k]}</option>`).join('')}</select></div>`).join('')+'</details>'}).join('');
+  el.querySelectorAll('select').forEach(s=>s.onchange=()=>{const st=S.gram[s.dataset.g];st.s=s.value;st.lv=s.value==='practiced'?1:0;st.due=Date.now()+(s.value==='learned'?LEARNED_IV0:0);save();toast('Moved ✓');renderGram()})}
 // ---- new card types
 const plain=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[đĐ]/g,'d').toLowerCase().replace(/\(.*?\)/g,'').replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
 function lev(a,b){const m=a.length,n=b.length;let p=Array.from({length:n+1},(_,j)=>j);for(let i=1;i<=m;i++){const q=[i];for(let j=1;j<=n;j++)q[j]=Math.min(p[j]+1,q[j-1]+1,p[j-1]+(a[i-1]===b[j-1]?0:1));p=q}return p[n]}
@@ -161,7 +210,7 @@ function distractors(c){const all=cards(),idx=all.indexOf(c),want=sylls(c.sent.b
   const near=all.slice(Math.max(0,idx-60),idx+60).filter(ok),pool=[...near.filter(w=>sylls(answers(w)[0])===want),...near,...all.filter(w=>ok(w)&&sylls(answers(w)[0])===want)];
   const out=[];for(const w of pool.sort(()=>Math.random()-.5)){const a=answers(w)[0];if(!out.some(x=>plain(x)===plain(a)))out.push(a);if(out.length===2)break}return out}
 function revealHTML(c,ok){const s=c.sent,hl=esc(s.vi).replace(esc(s.blank),'<b class="hl">'+esc(s.blank)+'</b>');return `${hl} <button class="say" data-say="${esc(s.vi)}">🔊</button><br><small>${esc(s.en||c.en)}</small>`}
-function finishQ(box,g){record(cur(),g);sess.done=true;const b=$(box);b.classList.remove('pop','wig');void b.offsetWidth;b.classList.add(g===2?'pop':'wig');if(g===2)confetti(30);$('qNext').hidden=false;setTimeout(()=>$('qNext').scrollIntoView({block:'center',behavior:SAFE?'auto':'smooth'}),60);
+function finishQ(box,g,item){record(cur(),g,item);sess.done=true;const b=$(box);b.classList.remove('pop','wig');void b.offsetWidth;b.classList.add(g===2?'pop':'wig');if(g===2)confetti(30);$('qNext').hidden=false;setTimeout(()=>$('qNext').scrollIntoView({block:'center',behavior:SAFE?'auto':'smooth'}),60);
   document.querySelectorAll('#'+box+' [data-say]').forEach(x=>x.onclick=()=>speak(x.dataset.say))}
 function showPick(c){const s=c.sent;$('pSent').innerHTML=esc(s.vi).replace(esc(s.blank),'<span class="gap">&nbsp;?&nbsp;</span>');$('pRev').hidden=true;
   const opts=[s.blank,...distractors(c)].sort(()=>Math.random()-.5);
@@ -177,7 +226,9 @@ function typeResult(kind){const c=cur(),r=$('tRev'),ans=answers(c);$('tIn').disa
 function checkType(){if(sess.done)return;const v=plain($('tIn').value);if(!v)return toast('Type your answer ✏️');const ans=answers(cur()).map(plain);
   if(ans.includes(v))return typeResult('ok');const d=Math.min(...ans.map(a=>lev(v,a)));const tol=Math.max(...ans.map(a=>a.length))>6?2:1;typeResult(d<=tol?'close':'no')}
 function init(){if(inited)return renderHome();inited=true;show('home');
-  $('tCheck').onclick=checkType;$('tIn').addEventListener('keydown',e=>{if(e.key==='Enter')checkType()});
+  $('tCheck').onclick=checkType;$('gCheck').onclick=gCheckFill;$('gIn').addEventListener('keydown',e=>{if(e.key==='Enter')gCheckFill()});$('gReoCheck').onclick=gCheckReo;
+  $('gUndo').onclick=()=>{if(!sess.done&&sess.ans.length){sess.pool.push(sess.ans.pop());renderChips()}};$('gShow').onclick=gShowModel;document.querySelectorAll('#gSelf button').forEach(b=>b.onclick=()=>gSelfGrade(+b.dataset.sg));
+  $('gStart').onclick=()=>{startSession('gram');show('study')};$('gmixSel').value=S.gmix==null?20:S.gmix;$('gmixSel').onchange=e=>{S.gmix=+e.target.value;save()};$('tIn').addEventListener('keydown',e=>{if(e.key==='Enter')checkType()});
   $('tHint').onclick=()=>{if(sess.done)return;sess.hint=true;const a=answers(cur())[0]||cur().vi;$('tIn').placeholder='Bắt đầu bằng: '+a[0]+'…';toast('💡 Starts with “'+a[0]+'”')};
   $('tShow').onclick=()=>{if(!sess.done)typeResult('shown')};$('qNext').onclick=()=>{sess.i++;showCard()};
   settings();$('tyFlash').checked=S.types.flash;$('tyPick').checked=S.types.pick;$('tyType').checked=S.types.type;$('mixSel').value=S.mix;
@@ -187,7 +238,7 @@ function init(){if(inited)return renderHome();inited=true;show('home');
   $('startBtn').onclick=()=>{if(S.g)S.g.showMore=0;sess=null;show('study')};$('quitBtn').onclick=()=>{sess=null;show('home')};
   $('card').onclick=e=>{if(e.target.classList.contains('say'))return;$('card').classList.toggle('flip')};
   $('say1').onclick=$('say2').onclick=()=>cur()&&speak(cur().vi);
-  document.querySelectorAll('.grade button').forEach(b=>b.onclick=()=>answer(+b.dataset.g));
+  document.querySelectorAll('.grade button[data-g]').forEach(b=>b.onclick=()=>answer(+b.dataset.g));
   let sx,sy;const cd=$('card');cd.addEventListener('touchstart',e=>{sx=e.touches[0].clientX;sy=e.touches[0].clientY},{passive:true});
   cd.addEventListener('touchend',e=>{const dx=e.changedTouches[0].clientX-sx,dy=e.changedTouches[0].clientY-sy;if(Math.abs(dx)>70&&Math.abs(dx)>Math.abs(dy))answer(dx>0?2:0);else if(dy<-70)answer(1)});
   document.querySelectorAll('#wtabs button').forEach(b=>b.onclick=()=>{tab=b.dataset.s;shown=60;renderWords()});
@@ -203,7 +254,7 @@ function init(){if(inited)return renderHome();inited=true;show('home');
   renderHome();
 }
 function welcome(){document.body.classList.add('welcome');$('v-welcome').classList.add('on')}
-async function handleFile(file,fromWelcome){try{if(!fromWelcome&&S&&Object.keys(S.cards).length&&/^\s*\{\s*"v"/.test((await file.slice(0,40).text()))&&!confirm('This is a progress backup and will REPLACE your current progress. Continue?'))return;const r=importText(await file.text(),file.name);toast(r==='progress'?'Progress restored ✓':(`🌸 +${r.added} new · ${r.updated} updated`));confetti(120);
+async function handleFile(file,fromWelcome){try{if(!fromWelcome&&S&&Object.keys(S.cards).length&&/^\s*\{\s*"v"/.test((await file.slice(0,40).text()))&&!confirm('This is a progress backup and will REPLACE your current progress. Continue?'))return;const r=importText(await file.text(),file.name);toast(r==='progress'?'Progress restored ✓':(`🌸 +${r.added} new · ${r.updated} updated`+(r.gram?` · 📐 ${r.gram.points} grammar`:'')));confetti(120);
   if(fromWelcome){document.body.classList.remove('welcome');$('v-welcome').classList.remove('on');init()}else show('home')}catch(e){toast('Hmm, that file didn\'t work 🙈')}}
 let inited=false;
 // Crash-loop guard: if the last start never reached "stable", switch to safe mode next time and offer recovery.
@@ -222,4 +273,4 @@ function boot(){try{
   S?init():welcome()}catch(e){console.error(e);recovery(e)}}
 load().then(boot,e=>{console.error(e);recovery(e)});
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').then(r=>r.update()).catch(()=>{});
-window.__app={checkStreak,level,renderHome,saveNow,mergeWords,pickType,plain,lev,buildQueue,grade,get S(){return S},PRAC_IV,LEARNED_IV0};
+window.__app={get sess(){return sess},showCard,startSession,gramQueue,mergeGrammar,checkStreak,level,renderHome,saveNow,mergeWords,pickType,plain,lev,buildQueue,grade,get S(){return S},PRAC_IV,LEARNED_IV0};

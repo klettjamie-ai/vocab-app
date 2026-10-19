@@ -57,6 +57,12 @@ canvas#cf{display:none}
 .trow{display:flex;gap:8px}.types label{display:flex;gap:10px;align-items:center;margin:6px 0}.types input{width:auto}.nopulse{animation:none!important}
 .qbox.pop{animation:pop .45s}.qbox.wig{animation:wig .4s}
 [hidden]{display:none!important}
+nav button{font-size:11px}.gpat{font-weight:800;color:#8b6fe8;margin:10px 0 0}.gbox textarea{width:100%;border-radius:18px;border:2px solid var(--lav);padding:12px;font:inherit;font-size:17px;color:var(--ink)}
+.chips{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin:10px 0;min-height:46px}.chips.ans{background:#f6f2ff;border-radius:18px;padding:8px;border:2px dashed #c9b8ff}
+.chips button{border:0;border-radius:16px;padding:10px 12px;font:inherit;font-size:17px;font-weight:700;background:var(--butter);color:var(--ink);box-shadow:0 3px 8px #0000000f}.chips.ans button{background:var(--mint)}
+.gsum{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:8px 0}.gsum div{border-radius:18px;padding:10px;text-align:center;font-weight:800}
+.ggrp{background:#fff;border-radius:22px;padding:12px 14px;margin:10px 0;box-shadow:0 4px 12px #b9a8e022}.ggrp summary{font-weight:800;list-style:none;cursor:pointer}.ggrp summary::-webkit-details-marker{display:none}
+.gbar{display:flex;height:8px;border-radius:8px;overflow:hidden;margin-top:8px;background:#f0eafc}.gbar i{display:block}.gpt{display:flex;gap:8px;align-items:center;padding:8px 0;border-top:1px solid #f0eafc}.gpt div{flex:1;min-width:0}.gpt small{color:#6b6385;display:block}.gpt select{width:auto;font-size:12px;padding:5px}
 .mascot{display:flex;align-items:center;gap:12px;margin-bottom:12px}.mem{font-size:54px;transition:transform .4s}.mem.sad{filter:grayscale(.6);transform:rotate(-12deg) translateY(6px)}.mem.happy{animation:bnc 1s 2}
 .mbub{flex:1;background:#fff;border-radius:22px;padding:12px 14px;font-weight:700;box-shadow:0 6px 16px #b9a8e022;position:relative}
 .moreround{background:var(--mint);border-radius:24px;padding:12px 14px;margin-bottom:12px;text-align:center;font-weight:700}
@@ -98,6 +104,13 @@ canvas#cf{display:none}
  <div id="typeBox" class="qbox" hidden><span class="qlab">⌨️ Viết bằng tiếng Việt · Type it in Vietnamese</span><div class="qen" id="tEn"></div>
   <input id="tIn" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Tiếng Việt…"><div class="trow"><button class="btn2" id="tHint">💡 Hint</button><button class="btn2" id="tShow">👀 Show answer</button></div>
   <button class="big nopulse" id="tCheck">Check ✓</button><div class="reveal" id="tRev" hidden></div></div>
+ <div id="gramBox" class="qbox gbox" hidden><span class="qlab" id="gLab">📐 Ngữ pháp</span><div class="gpat" id="gPat"></div><div class="qen" id="gPrompt"></div><div class="qsent" id="gSent"></div>
+  <div class="opts" id="gOpts"></div>
+  <div id="gFill" hidden><input id="gIn" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Từ còn thiếu…"><button class="big nopulse" id="gCheck">Check ✓</button></div>
+  <div id="gReo" hidden><div class="chips ans" id="gAns"></div><div class="chips" id="gChips"></div><div class="trow"><button class="btn2" id="gUndo">↩︎ Undo</button><button class="btn2" id="gReoCheck">Check ✓</button></div></div>
+  <div id="gBuild" hidden><textarea id="gTxt" rows="3" placeholder="Viết câu của bạn…"></textarea><button class="big nopulse" id="gShow">👀 So sánh với đáp án</button></div>
+  <div class="reveal" id="gRev" hidden></div>
+  <div class="grade" id="gSelf" hidden><button class="g0" data-sg="0">😵<br>Didn't know</button><button class="g1" data-sg="1">🤔<br>Kinda</button><button class="g2" data-sg="2">😎<br>Knew it</button></div></div>
  <button class="big nopulse" id="qNext" hidden>Tiếp theo →</button>
  <div class="grade" id="gradeRow"><button class="g0" data-g="0">😵<br>Didn't know</button><button class="g1" data-g="1">🤔<br>Kinda</button><button class="g2" data-g="2">😎<br>Knew it</button></div>
  <button class="btn2" id="quitBtn">Xong / Done</button>
@@ -106,17 +119,23 @@ canvas#cf{display:none}
  <div class="tabs" id="wtabs"><button class="learn on" data-s="learn">To learn</button><button class="practiced" data-s="practiced">Practiced</button><button class="learned" data-s="learned">Learned</button></div>
  <input id="q" type="search" placeholder="🔎 Tìm từ / search…"><div id="wlist"></div><button class="btn2" id="more">Show more</button>
 </section>
+<section class="view" id="v-gram">
+ <h2 style="margin:6px 0">📐 Ngữ pháp</h2><div class="gsum" id="gSum"></div>
+ <button class="big nopulse" id="gStart">▶ Luyện ngữ pháp</button>
+ <div id="gList"></div>
+</section>
 <section class="view" id="v-more">
  <h3>➕ Add a word</h3><input id="nvi" placeholder="Tiếng Việt"><input id="nen" placeholder="Meaning"><input id="nex" placeholder="Example (optional)">
  <button class="big" id="addBtn">Add to “Words to learn”</button>
  <h3>⚙️ Settings</h3><label class="muted">Daily goal</label><select id="goalSel"><option>10</option><option>20</option><option>30</option><option>50</option><option>75</option><option>100</option><option>150</option><option value="custom">Custom…</option></select>
  <label class="muted">Card types</label><div class="types"><label><input type="checkbox" id="tyFlash"> 🃏 Flashcards</label><label><input type="checkbox" id="tyPick"> 🧩 Sentence pick</label><label><input type="checkbox" id="tyType"> ⌨️ English → Vietnamese</label></div>
+ <label class="muted">Grammar in daily sessions</label><select id="gmixSel"><option value="0">Off</option><option value="10">10%</option><option value="20">20%</option><option value="30">30%</option><option value="50">50%</option></select>
  <label class="muted">Mix</label><select id="mixSel"><option value="50,25,25">Balanced (50 / 25 / 25)</option><option value="70,15,15">Mostly flashcards (70 / 15 / 15)</option><option value="34,33,33">Even (⅓ each)</option><option value="20,40,40">Mostly quizzes (20 / 40 / 40)</option></select>
  <label class="muted">Cards per session</label><select id="sessSel"><option>10</option><option>20</option><option>30</option><option>50</option></select>
  <label class="muted" style="display:flex;gap:10px;align-items:center;margin:10px 0"><input type="checkbox" id="sndToggle" style="width:auto"> 🔔 Sounds &amp; buzz effects</label>
  <h3>💾 Backup</h3><button class="btn2" id="expBtn">Export progress (JSON)</button><button class="btn2" id="impBtn">📥 Import word list / backup</button><input type="file" id="impFile" accept=".json,.csv,application/json,text/csv" hidden>
  <label class="muted" style="display:flex;gap:10px;align-items:center;margin:10px 0"><input type="checkbox" id="safeToggle" style="width:auto"> Safe mode (no animations)</label><p class="muted" id="ver"></p>
 </section>
-<nav><button class="on" data-v="home"><b>🏠</b>Home</button><button data-v="study"><b>🃏</b>Practice</button><button data-v="words"><b>📚</b>Words</button><button data-v="more"><b>⚙️</b>More</button></nav>
+<nav><button class="on" data-v="home"><b>🏠</b>Home</button><button data-v="study"><b>🃏</b>Practice</button><button data-v="words"><b>📚</b>Words</button><button data-v="gram"><b>📐</b>Ngữ pháp</button><button data-v="more"><b>⚙️</b>More</button></nav>
 <div class="toast" id="toast"></div><canvas id="cf"></canvas>
-<script src="app.js?v=6"></script></body></html>
+<script src="app.js?v=7"></script></body></html>

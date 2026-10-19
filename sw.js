@@ -1,5 +1,5 @@
 // v4: network-first for pages/scripts so fixes arrive promptly; cache fallback offline. GET same-origin only.
-const C='tuvung-v6';const F=['./','index.html','app.js','app.js?v=6','manifest.webmanifest','icon-180.png','icon-192.png','icon-512.png'];
+const C='tuvung-v7';const F=['./','index.html','app.js','app.js?v=7','manifest.webmanifest','icon-180.png','icon-192.png','icon-512.png'];
 self.addEventListener('install',e=>{self.skipWaiting();e.waitUntil(caches.open(C).then(c=>c.addAll(F)).catch(()=>{}))});
 self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(k=>Promise.all(k.filter(x=>x!==C).map(x=>caches.delete(x)))).then(()=>self.clients.claim()))});
 self.addEventListener('fetch',e=>{const r=e.request;if(r.method!=='GET')return;const u=new URL(r.url);if(u.origin!==location.origin)return;
