@@ -30,6 +30,7 @@ nav button{flex:1;background:none;border:0;color:#8a83a3;padding:8px 0;font:inhe
 .hint{color:#9a93b3;font-size:14px;margin-top:18px}
 .grade{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.grade button{border:0;border-radius:24px;padding:15px 4px;font:inherit;font-size:16px;font-weight:800;color:var(--ink);box-shadow:0 6px 14px #0000000f;transition:transform .12s}.grade button:active{transform:scale(.92)}
 .g0{background:var(--pink)}.g1{background:var(--butter)}.g2{background:var(--mint)}
+.dirlab{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);font-size:12px;font-weight:800;background:var(--blue);padding:3px 10px;border-radius:12px}.vi.fen{font-size:30px}
 .card.wig{animation:wig .4s}.card.bnc{animation:bnc .45s}.card.pop{animation:pop .45s}
 @keyframes wig{20%,60%{transform:rotate(-4deg)}40%,80%{transform:rotate(4deg)}}
 @keyframes bnc{40%{transform:translateY(-14px)}70%{transform:translateY(4px)}}
@@ -98,7 +99,7 @@ nav button{font-size:11px}.gpat{font-weight:800;color:#8b6fe8;margin:10px 0 0}.g
 <section class="view" id="v-study">
  <div class="bar"><i id="pbar" style="width:0"></i></div>
  <div class="srow"><span class="smasc" id="sMasc">🌱</span><span class="combo" id="combo"></span><span class="xpgain" id="xpGain"></span></div>
- <div class="card" id="card"><div class="inner"><div class="face front"><span class="tag" id="tag"></span><button class="say" id="say1">🔊</button><div class="vi" id="fvi"></div><div class="hint">chạm để lật · tap to flip</div></div>
+ <div class="card" id="card"><div class="inner"><div class="face front"><span class="tag" id="tag"></span><span class="dirlab" id="dirlab"></span><button class="say" id="say1">🔊</button><div class="vi" id="fvi"></div><div class="hint">chạm để lật · tap to flip</div></div>
  <div class="face back"><button class="say" id="say2">🔊</button><div class="vi" id="bvi"></div><div class="en" id="ben"></div><div class="ex" id="bex"></div></div></div></div>
  <div id="pickBox" class="qbox" hidden><span class="qlab">🧩 Chọn từ đúng · Pick the word</span><div class="qsent" id="pSent"></div><div class="opts" id="pOpts"></div><div class="reveal" id="pRev" hidden></div></div>
  <div id="typeBox" class="qbox" hidden><span class="qlab">⌨️ Viết bằng tiếng Việt · Type it in Vietnamese</span><div class="qen" id="tEn"></div>
@@ -129,6 +130,7 @@ nav button{font-size:11px}.gpat{font-weight:800;color:#8b6fe8;margin:10px 0 0}.g
  <button class="big" id="addBtn">Add to “Words to learn”</button>
  <h3>⚙️ Settings</h3><label class="muted">Daily goal</label><select id="goalSel"><option>10</option><option>20</option><option>30</option><option>50</option><option>75</option><option>100</option><option>150</option><option value="custom">Custom…</option></select>
  <label class="muted">Card types</label><div class="types"><label><input type="checkbox" id="tyFlash"> 🃏 Flashcards</label><label><input type="checkbox" id="tyPick"> 🧩 Sentence pick</label><label><input type="checkbox" id="tyType"> ⌨️ English → Vietnamese</label></div>
+<label class="muted">Flashcard direction</label><select id="fdirSel"><option value="mix">🔀 Mixed (random)</option><option value="vi">Vietnamese → English</option><option value="en">English → Vietnamese</option></select>
  <label class="muted">Grammar in daily sessions</label><select id="gmixSel"><option value="0">Off</option><option value="10">10%</option><option value="20">20%</option><option value="30">30%</option><option value="50">50%</option></select>
  <label class="muted">Mix</label><select id="mixSel"><option value="50,25,25">Balanced (50 / 25 / 25)</option><option value="70,15,15">Mostly flashcards (70 / 15 / 15)</option><option value="34,33,33">Even (⅓ each)</option><option value="20,40,40">Mostly quizzes (20 / 40 / 40)</option></select>
  <label class="muted">Cards per session</label><select id="sessSel"><option>10</option><option>20</option><option>30</option><option>50</option></select>
@@ -138,4 +140,4 @@ nav button{font-size:11px}.gpat{font-weight:800;color:#8b6fe8;margin:10px 0 0}.g
 </section>
 <nav><button class="on" data-v="home"><b>🏠</b>Home</button><button data-v="study"><b>🃏</b>Practice</button><button data-v="words"><b>📚</b>Words</button><button data-v="gram"><b>📐</b>Ngữ pháp</button><button data-v="more"><b>⚙️</b>More</button></nav>
 <div class="toast" id="toast"></div><canvas id="cf"></canvas>
-<script src="app.js?v=7"></script></body></html>
+<script src="app.js?v=8"></script></body></html>

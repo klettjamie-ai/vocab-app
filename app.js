@@ -80,7 +80,8 @@ function renderHome(){rollDay();checkStreak();const cnt={learn:0,practiced:0,lea
   document.querySelectorAll('.tile').forEach(t=>t.onclick=()=>{tab=t.dataset.s;show('words')});
   const p=Math.min(100,S.doneCount/S.goal*100);$('ringc').setAttribute('stroke-dasharray',p+' 100');$('ringt').textContent=Math.round(p)+'%';
   $('goaltxt').textContent=`${S.doneCount} / ${S.goal} hôm nay`;$('duetxt').textContent=`${due} due for review`;$('streak').textContent='🔥 '+S.streak;try{renderGame()}catch(e){console.warn(e)}}
-function settings(){S.types=S.types||{flash:true,pick:true,type:true};S.mix=S.mix||'50,25,25';return S}
+function settings(){S.types=S.types||{flash:true,pick:true,type:true};S.mix=S.mix||'50,25,25';if(!['vi','en','mix'].includes(S.fdir))S.fdir='mix';return S}
+const flashDir=()=>{const d=settings().fdir;return d==='mix'?(Math.random()<.5?'vi':'en'):d};
 function pickType(c){const t=settings().types,m=S.mix.split(',').map(Number);let opts=[['flash',m[0]],['pick',m[1]],['type',m[2]]].filter(([k])=>t[k]&&(k!=='pick'||(c.sent&&c.sent.blank)));
   if(!opts.length)return 'flash';let r=Math.random()*opts.reduce((s,o)=>s+o[1],0);for(const [k,w] of opts){if((r-=w)<0)return k}return opts[0][0]}
 const hasGram=()=>S.gdata&&S.gram&&Object.keys(S.gram).length;
@@ -97,11 +98,11 @@ function showCard(){const it=sess.q[sess.i],c=it&&it.c;$('card').classList.remov
   const t=it?(it.g?'gram':it.t):'flash';$('card').hidden=t!=='flash';$('gradeRow').hidden=t!=='flash';$('pickBox').hidden=t!=='pick';$('typeBox').hidden=t!=='type';$('gramBox').hidden=t!=='gram';$('qNext').hidden=true;
   if(t==='gram'){$('pbar').style.width=(sess.i/sess.q.length*100)+'%';return showGram(it)}
   if(!c){celebrate('🎉 Xong rồi! Giỏi quá!');sess=null;return show('home')}
-  $('fvi').textContent=$('bvi').textContent=c.vi;$('ben').textContent=c.en;$('bex').textContent=c.ex||'';
+  if(t==='flash'&&!it.d)it.d=flashDir();const en=t==='flash'&&it.d==='en';$('fvi').textContent=en?c.en:c.vi;$('fvi').className=en?'vi fen':'vi';$('say1').hidden=en;$('dirlab').textContent=en?'EN → VI':'VI → EN';$('bvi').textContent=c.vi;$('ben').textContent=c.en;$('bex').textContent=c.ex||'';
   $('tag').textContent=NAMES[c.s];$('tag').className='tag '+c.s;$('pbar').style.width=(sess.i/sess.q.length*100)+'%';if(t==='pick')showPick(c);if(t==='type')showType(c)}
 function answer(g){if(!sess)return;const c=cur();if(!c)return;const cd=$('card');cd.classList.remove('wig','bnc','pop');void cd.offsetWidth;cd.classList.add(['wig','pop','bnc'][g]);record(c,g);sess.i++;showCard()}
 function record(c,g,item){grade(c,g);
-  if(g===0)sess.q.splice(Math.min(sess.q.length,sess.i+4),0,item&&item.g?{g:item.g,t:gType()}:{c,t:'flash'});if(item&&item.g){G().gtotal=(G().gtotal||0)+1} // missed: see again soon in this session
+  if(g===0)sess.q.splice(Math.min(sess.q.length,sess.i+4),0,item&&item.g?{g:item.g,t:gType()}:{c,t:'flash',d:sess.q[sess.i]&&sess.q[sess.i].d});if(item&&item.g){G().gtotal=(G().gtotal||0)+1} // missed: see again soon in this session
   rollDay();S.doneCount++;
   if(S.doneCount>=S.goal&&S.lastDay!==today()){const y=new Date(Date.now()-DAY).toLocaleDateString('en-CA');S.streak=S.lastDay===y?S.streak+1:(S.lastDay===today()?S.streak:1);S.lastDay=today();$('streak').textContent='🔥 '+S.streak;celebrate('🔥 Daily goal! Streak '+S.streak)}
   else if(g===2&&c.s==='learned'&&c.lv===0)celebrate('🌟 Learned: '+(c.vi||(S.gdata&&S.gdata.points[c.id]||{}).pattern),false);
@@ -231,7 +232,7 @@ function init(){if(inited)return renderHome();inited=true;show('home');
   $('gStart').onclick=()=>{startSession('gram');show('study')};$('gmixSel').value=S.gmix==null?20:S.gmix;$('gmixSel').onchange=e=>{S.gmix=+e.target.value;save()};$('tIn').addEventListener('keydown',e=>{if(e.key==='Enter')checkType()});
   $('tHint').onclick=()=>{if(sess.done)return;sess.hint=true;const a=answers(cur())[0]||cur().vi;$('tIn').placeholder='Bắt đầu bằng: '+a[0]+'…';toast('💡 Starts with “'+a[0]+'”')};
   $('tShow').onclick=()=>{if(!sess.done)typeResult('shown')};$('qNext').onclick=()=>{sess.i++;showCard()};
-  settings();$('tyFlash').checked=S.types.flash;$('tyPick').checked=S.types.pick;$('tyType').checked=S.types.type;$('mixSel').value=S.mix;
+  settings();$('tyFlash').checked=S.types.flash;$('tyPick').checked=S.types.pick;$('tyType').checked=S.types.type;$('mixSel').value=S.mix;$('fdirSel').value=S.fdir;$('fdirSel').onchange=e=>{S.fdir=e.target.value;save()};
   [['tyFlash','flash'],['tyPick','pick'],['tyType','type']].forEach(([id,k])=>$(id).onchange=e=>{S.types[k]=e.target.checked;if(!S.types.flash&&!S.types.pick&&!S.types.type){S.types.flash=true;$('tyFlash').checked=true}save()});
   $('mixSel').onchange=e=>{S.mix=e.target.value;save()};
   document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>show(b.dataset.v));
@@ -273,4 +274,4 @@ function boot(){try{
   S?init():welcome()}catch(e){console.error(e);recovery(e)}}
 load().then(boot,e=>{console.error(e);recovery(e)});
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').then(r=>r.update()).catch(()=>{});
-window.__app={get sess(){return sess},showCard,startSession,gramQueue,mergeGrammar,checkStreak,level,renderHome,saveNow,mergeWords,pickType,plain,lev,buildQueue,grade,get S(){return S},PRAC_IV,LEARNED_IV0};
+window.__app={flashDir,get sess(){return sess},showCard,startSession,gramQueue,mergeGrammar,checkStreak,level,renderHome,saveNow,mergeWords,pickType,plain,lev,buildQueue,grade,get S(){return S},PRAC_IV,LEARNED_IV0};
