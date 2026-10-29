@@ -80,7 +80,7 @@ function renderHome(){rollDay();checkStreak();const cnt={learn:0,practiced:0,lea
   document.querySelectorAll('.tile').forEach(t=>t.onclick=()=>{tab=t.dataset.s;show('words')});
   const p=Math.min(100,S.doneCount/S.goal*100);$('ringc').setAttribute('stroke-dasharray',p+' 100');$('ringt').textContent=Math.round(p)+'%';
   $('goaltxt').textContent=`${S.doneCount} / ${S.goal} hôm nay`;$('duetxt').textContent=`${due} due for review`;$('streak').textContent='🔥 '+S.streak;try{renderGame()}catch(e){console.warn(e)}}
-function settings(){S.types=S.types||{flash:true,pick:true,type:true};S.mix=S.mix||'50,25,25';if(!['vi','en','mix'].includes(S.fdir))S.fdir='mix';return S}
+function settings(){S.types=S.types||{flash:true,pick:true,type:true};S.mix=S.mix||'50,25,25';if(!['vi','en','mix'].includes(S.fdir))S.fdir='mix';if(typeof S.gon!=='boolean')S.gon=true;return S}
 const flashDir=()=>{const d=settings().fdir;return d==='mix'?(Math.random()<.5?'vi':'en'):d};
 function pickType(c){const t=settings().types,m=S.mix.split(',').map(Number);let opts=[['flash',m[0]],['pick',m[1]],['type',m[2]]].filter(([k])=>t[k]&&(k!=='pick'||(c.sent&&c.sent.blank)));
   if(!opts.length)return 'flash';let r=Math.random()*opts.reduce((s,o)=>s+o[1],0);for(const [k,w] of opts){if((r-=w)<0)return k}return opts[0][0]}
@@ -89,7 +89,7 @@ function gramQueue(n,now=Date.now()){if(!hasGram())return [];const order=Object.
   const prac=all.filter(x=>x.s==='practiced'&&x.due<=now).sort((a,b)=>a.due-b.due),lrn=all.filter(x=>x.s==='learned'&&x.due<=now),neu=all.filter(x=>x.s==='learn');
   const q=[],take=(arr,k)=>{while(k-->0&&arr.length&&q.length<n)q.push(arr.shift())};take(prac,Math.ceil(n*.6));take(lrn,Math.ceil(n*.2));take(neu,n);take(prac,n);take(lrn,n);return q}
 const gType=()=>['choose','fill','reorder','build'][Math.random()*4|0];
-function startSession(mode){const n=S.sessN,gm=mode==='gram'?n:(hasGram()?Math.round(n*(S.gmix==null?20:S.gmix)/100):0);
+function startSession(mode){settings();if(mode==='gram'&&!S.gon)mode=undefined;const n=S.sessN,gm=mode==='gram'?n:(hasGram()&&S.gon?Math.round(n*(S.gmix==null?20:S.gmix)/100):0);
   const gq=gramQueue(gm).map(x=>({g:x.id,t:gType()})),wq=mode==='gram'?[]:buildQueue(n-gq.length).map(c=>({c,t:pickType(c)}));
   const q=wq.slice();gq.forEach((it,i)=>q.splice(Math.floor((i+1)*q.length/(gq.length+1))+i,0,it));
   sess={q,i:0,mode};sess.total=q.length;showCard()}
@@ -195,7 +195,7 @@ function gShowModel(){if(sess.done||sess.gshown)return;sess.gshown=1;const {p,it
 function gSelfGrade(g){if(sess.done)return;$('gSelf').hidden=true;$('gTxt').disabled=false;sess.gshown=0;const it=sess.q[sess.i];record(cur(),g,it);sess.done=true;$('qNext').hidden=false;if(g===2)confetti(30)}
 const GS={learn:'To learn',practiced:'Practiced',learned:'Learned'};
 function renderGram(){const el=$('gList');if(!hasGram()){$('gSum').innerHTML='';el.innerHTML='<div class="empty"><span class="e">📐</span><b>No grammar yet</b><br>Go to More → 🔄 Update words and pick your my-words.json (v3).</div>';$('gStart').hidden=true;return}
-  $('gStart').hidden=false;const cnt={learn:0,practiced:0,learned:0};Object.values(S.gram).forEach(x=>cnt[x.s]++);
+  $('gStart').hidden=!settings().gon;const cnt={learn:0,practiced:0,learned:0};Object.values(S.gram).forEach(x=>cnt[x.s]++);
   $('gSum').innerHTML=Object.keys(cnt).map(k=>`<div class="${k}">${cnt[k]}<br><small>${GS[k]}</small></div>`).join('');
   el.innerHTML=S.gdata.groups.map(g=>{const ps=Object.values(S.gdata.points).filter(p=>p.group===g.n),c={learn:0,practiced:0,learned:0};ps.forEach(p=>c[(S.gram[p.id]||{}).s||'learn']++);
     const bar=['learned','practiced','learn'].map(k=>`<i class="${k}" style="width:${c[k]/ps.length*100}%"></i>`).join('');
@@ -229,7 +229,7 @@ function checkType(){if(sess.done)return;const v=plain($('tIn').value);if(!v)ret
 function init(){if(inited)return renderHome();inited=true;show('home');
   $('tCheck').onclick=checkType;$('gCheck').onclick=gCheckFill;$('gIn').addEventListener('keydown',e=>{if(e.key==='Enter')gCheckFill()});$('gReoCheck').onclick=gCheckReo;
   $('gUndo').onclick=()=>{if(!sess.done&&sess.ans.length){sess.pool.push(sess.ans.pop());renderChips()}};$('gShow').onclick=gShowModel;document.querySelectorAll('#gSelf button').forEach(b=>b.onclick=()=>gSelfGrade(+b.dataset.sg));
-  $('gStart').onclick=()=>{startSession('gram');show('study')};$('gmixSel').value=S.gmix==null?20:S.gmix;$('gmixSel').onchange=e=>{S.gmix=+e.target.value;save()};$('tIn').addEventListener('keydown',e=>{if(e.key==='Enter')checkType()});
+  $('gStart').onclick=()=>{startSession('gram');show('study')};$('gmixSel').value=S.gmix==null?20:S.gmix;$('gmixSel').onchange=e=>{S.gmix=+e.target.value;save()};settings();$('gonToggle').checked=S.gon;$('gmixSel').disabled=!S.gon;$('gonToggle').onchange=e=>{S.gon=e.target.checked;$('gmixSel').disabled=!S.gon;save();try{renderGram()}catch(x){}};$('tIn').addEventListener('keydown',e=>{if(e.key==='Enter')checkType()});
   $('tHint').onclick=()=>{if(sess.done)return;sess.hint=true;const a=answers(cur())[0]||cur().vi;$('tIn').placeholder='Bắt đầu bằng: '+a[0]+'…';toast('💡 Starts with “'+a[0]+'”')};
   $('tShow').onclick=()=>{if(!sess.done)typeResult('shown')};$('qNext').onclick=()=>{sess.i++;showCard()};
   settings();$('tyFlash').checked=S.types.flash;$('tyPick').checked=S.types.pick;$('tyType').checked=S.types.type;$('mixSel').value=S.mix;$('fdirSel').value=S.fdir;$('fdirSel').onchange=e=>{S.fdir=e.target.value;save()};
