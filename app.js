@@ -1,7 +1,13 @@
 'use strict';
 const KEY='tuvung-state-v1',MIN=60e3,DAY=864e5;
-const PRAC_IV=[10*MIN,1*DAY,2*DAY,4*DAY]; // practiced: short intervals
+const PRAC_IV=[10*MIN,1*DAY,2*DAY,4*DAY]; // legacy interval table; full-credit stages use calendar days
 const LEARNED_IV0=14*DAY,LEARNED_MAX=120*DAY; // learned: long, doubling
+// Calendar-day scheduling; old millisecond due values stay untouched on load.
+const endOfDay=now=>{const d=new Date(now);d.setHours(23,59,59,999);return +d};
+const dueInDays=(now,n)=>{const d=new Date(now);d.setHours(0,0,0,0);d.setDate(d.getDate()+n);return +d};
+const isDue=(c,now=Date.now())=>(+c.due||0)<=endOfDay(now);
+const dueReviews=(all,now)=>all.filter(c=>c.s!=='learn'&&isDue(c,now)).sort((a,b)=>a.due-b.due);
+const newAllowance=()=>Math.max(0,S.goal-(S.doneDay===today()?S.doneCount:0));
 let S=null,sess=null,tab='learn',shown=60;
 const $=id=>document.getElementById(id);
 const today=()=>new Date().toLocaleDateString('en-CA');
@@ -37,7 +43,7 @@ function parseWords(text,name){
 function mergeWords(words){const now=Date.now();if(!S)S=blank();const byKey={};for(const id in S.cards)byKey[nkey(S.cards[id].vi)]=id;let added=0,updated=0;
   words.forEach(w=>{const id=S.cards[w.id]?w.id:byKey[nkey(w.vi)];
     if(id){const c=S.cards[id];let ch=false;if(w.sent&&JSON.stringify(c.sent)!==JSON.stringify(w.sent)){c.sent=w.sent;ch=true}if(!c.ex&&w.ex){c.ex=w.ex;ch=true}if(ch)updated++;return}
-    added++;S.cards[w.id]={id:w.id,vi:w.vi,en:w.en,ex:w.ex,s:w.s,lv:w.s==='practiced'?1:0,due:w.s==='learned'?now+LEARNED_IV0:now,seen:0,ok:0,miss:0};if(w.sent)S.cards[w.id].sent=w.sent;byKey[nkey(w.vi)]=w.id});
+    added++;S.cards[w.id]={id:w.id,vi:w.vi,en:w.en,ex:w.ex,s:w.s,lv:w.s==='practiced'?1:0,due:w.s==='learned'?dueInDays(now,14):now,seen:0,ok:0,miss:0};if(w.sent)S.cards[w.id].sent=w.sent;byKey[nkey(w.vi)]=w.id});
   saveNow();return {added,updated}}
 function importText(text,name){const r=parseWords(text,name);
   if(r.progress){if(!valid(r.progress))throw new Error('bad backup');S=r.progress;saveNow();return 'progress'}
@@ -47,35 +53,29 @@ function mergeGrammar(gd){if(!S)S=blank();S.gram=S.gram||{};const pts={};let add
   S.gdata={groups:gd.groups,points:pts};saveNow();return {points:gd.points.length,added}}
 function rollDay(){if(S.doneDay!==today()){S.doneDay=today();S.doneCount=0;save()}}
 const cards=()=>Object.values(S.cards);
-// Build a session queue. Practiced words get priority (short intervals), learned words only when due (long intervals) plus a spot-check.
-function buildQueue(n,now=Date.now()){
-  const all=cards(),sh=a=>a.sort(()=>Math.random()-.5);
-  const prac=all.filter(c=>c.s==='practiced'&&c.due<=now).sort((a,b)=>a.due-b.due);
-  const lrn=all.filter(c=>c.s==='learned'&&c.due<=now).sort((a,b)=>a.due-b.due);
-  const neu=sh(all.filter(c=>c.s==='learn')).sort((a,b)=>(b.miss>0)-(a.miss>0));
-  const q=[],take=(arr,k)=>{while(k-->0&&arr.length&&q.length<n)q.push(arr.shift())};
-  take(prac,Math.ceil(n*.6));take(lrn,Math.ceil(n*.2));
-  if(!q.some(c=>c.s==='learned')){const ex=sh(all.filter(c=>c.s==='learned'));take(ex,1)} // retention spot-check
-  take(neu,n);take(prac,n);take(lrn,n);
-  return sh(q);
+// Due reviews always precede new words. A goal limits NEW cards, never overdue review.
+function buildQueue(n,now=Date.now(),newBudget=newAllowance()){
+  const all=cards(),due=dueReviews(all,now),q=due.slice(0,n);
+  const neu=all.filter(c=>c.s==='learn'&&isDue(c,now)).sort(()=>Math.random()-.5).sort((a,b)=>(b.miss>0)-(a.miss>0));
+  return q.concat(neu.slice(0,Math.max(0,Math.min(n-q.length,newBudget-q.length))));
 }
 function grade(c,g,now=Date.now()){
   c.seen++;
   if(g===0){c.miss++;c.s='learn';c.lv=0;c.due=now}
-  else if(g===1){if(c.s==='learned'){c.s='practiced';c.lv=1}else{c.s='practiced';c.lv=Math.max(0,Math.min(c.lv,1))}c.due=now+PRAC_IV[c.lv]}
+  else if(g===1){c.due=dueInDays(now,1)} // Hint / Kinda: same section and stage, retry tomorrow
   else{c.ok++;
-    if(c.s==='learn'){c.s='practiced';c.lv=1;c.due=now+PRAC_IV[1]}
-    else if(c.s==='practiced'){if(c.lv>=3){c.s='learned';c.lv=0;c.due=now+LEARNED_IV0}else{c.lv++;c.due=now+PRAC_IV[c.lv]}}
-    else{c.lv++;c.due=now+Math.min(LEARNED_MAX,LEARNED_IV0*2**c.lv)}}
+    if(c.s==='learn'){c.s='practiced';c.lv=1;c.due=dueInDays(now,1)}
+    else if(c.s==='practiced'){if(c.lv>=3){c.s='learned';c.lv=0;c.due=dueInDays(now,14)}else{c.lv++;c.due=dueInDays(now,PRAC_IV[c.lv]/DAY)}}
+    else{c.lv++;c.due=dueInDays(now,Math.min(LEARNED_MAX,LEARNED_IV0*2**c.lv)/DAY)}}
   c.last=now;
 }
-function move(id,s){const c=S.cards[id];c.s=s;c.lv=s==='practiced'?1:0;c.due=Date.now()+(s==='learned'?LEARNED_IV0:0);save()}
+function move(id,s){const c=S.cards[id];c.s=s;c.lv=s==='practiced'?1:0;c.due=s==='learned'?dueInDays(Date.now(),14):dueInDays(Date.now(),0);save()}
 // UI
 function show(v){document.querySelectorAll('.view').forEach(e=>e.classList.toggle('on',e.id==='v-'+v));document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));
   if(v==='home')renderHome();if(v==='words')renderWords();if(v==='gram')renderGram();if(v==='study'&&!sess)startSession()}
 const EMO={learn:'🌱',practiced:'🌼',learned:'🌈'};const NAMES={learn:'Words to learn',practiced:'Words practiced',learned:'Words learned'};
 function renderHome(){rollDay();checkStreak();const cnt={learn:0,practiced:0,learned:0},now=Date.now();let due=0;
-  cards().forEach(c=>{cnt[c.s]++;if(c.s!=='learn'&&c.due<=now)due++});
+  cards().forEach(c=>{cnt[c.s]++;if(c.s!=='learn'&&isDue(c,now))due++});
   $('tiles').innerHTML=Object.keys(cnt).map(k=>`<button class="tile ${k}" data-s="${k}"><span class="em">${EMO[k]}</span><span class="n">${cnt[k]}</span>${NAMES[k]}</button>`).join('');
   document.querySelectorAll('.tile').forEach(t=>t.onclick=()=>{tab=t.dataset.s;show('words')});
   const p=Math.min(100,S.doneCount/S.goal*100);$('ringc').setAttribute('stroke-dasharray',p+' 100');$('ringt').textContent=Math.round(p)+'%';
@@ -85,16 +85,26 @@ const flashDir=()=>{const d=settings().fdir;return d==='mix'?(Math.random()<.5?'
 function pickType(c){const t=settings().types,m=S.mix.split(',').map(Number);let opts=[['flash',m[0]],['pick',m[1]],['type',m[2]]].filter(([k])=>t[k]&&(k!=='pick'||(c.sent&&c.sent.blank)));
   if(!opts.length)return 'flash';let r=Math.random()*opts.reduce((s,o)=>s+o[1],0);for(const [k,w] of opts){if((r-=w)<0)return k}return opts[0][0]}
 const hasGram=()=>S.gdata&&S.gram&&Object.keys(S.gram).length;
-function gramQueue(n,now=Date.now()){if(!hasGram())return [];const order=Object.keys(S.gdata.points),all=order.map(id=>S.gram[id]).filter(Boolean);
-  const prac=all.filter(x=>x.s==='practiced'&&x.due<=now).sort((a,b)=>a.due-b.due),lrn=all.filter(x=>x.s==='learned'&&x.due<=now),neu=all.filter(x=>x.s==='learn');
-  const q=[],take=(arr,k)=>{while(k-->0&&arr.length&&q.length<n)q.push(arr.shift())};take(prac,Math.ceil(n*.6));take(lrn,Math.ceil(n*.2));take(neu,n);take(prac,n);take(lrn,n);return q}
+function gramQueue(n,now=Date.now(),newBudget=newAllowance()){
+  if(!hasGram())return [];const all=Object.keys(S.gdata.points).map(id=>S.gram[id]).filter(Boolean),q=dueReviews(all,now).slice(0,n);
+  return q.concat(all.filter(c=>c.s==='learn'&&isDue(c,now)).slice(0,Math.max(0,Math.min(n-q.length,newBudget-q.length))));
+}
 const gType=()=>['choose','fill','reorder','build'][Math.random()*4|0];
-function startSession(mode){settings();if(mode==='gram'&&!S.gon)mode=undefined;const n=S.sessN,gm=mode==='gram'?n:(hasGram()&&S.gon?Math.round(n*(S.gmix==null?20:S.gmix)/100):0);
-  const gq=gramQueue(gm).map(x=>({g:x.id,t:gType()})),wq=mode==='gram'?[]:buildQueue(n-gq.length).map(c=>({c,t:pickType(c)}));
-  const q=wq.slice();gq.forEach((it,i)=>q.splice(Math.floor((i+1)*q.length/(gq.length+1))+i,0,it));
-  sess={q,i:0,mode};sess.total=q.length;showCard()}
+function startSession(mode){
+  settings();rollDay();if(mode==='gram'&&!S.gon)mode=undefined;
+  const n=S.sessN,now=Date.now(),budget=newAllowance(),gm=mode==='gram'?n:(hasGram()&&S.gon?Math.round(n*(S.gmix==null?20:S.gmix)/100):0);
+  const toG=c=>({g:c.id,t:gType()}),toW=c=>({c,t:pickType(c)});
+  // First allocate only DUE reviews, preserving the grammar mix where possible.
+  let gs=gramQueue(gm,now,0),ws=mode==='gram'?[]:buildQueue(n-gs.length,now,0);
+  if(gm&&gs.length+ws.length<n){const ids=new Set(gs.map(c=>c.id));gs=gs.concat(gramQueue(n,now,0).filter(c=>!ids.has(c.id)).slice(0,n-gs.length-ws.length))}
+  const due=ws.map(toW);gs.forEach((c,i)=>due.splice(Math.min(due.length,(i+1)*Math.max(1,Math.floor(due.length/(gs.length+1)))+i),0,toG(c)));
+  // New grammar/words can use only slots left after every eligible review.
+  const left=Math.max(0,Math.min(n-due.length,budget-due.length)),gnew=gm?gramQueue(gm,now,budget).filter(c=>c.s==='learn').slice(0,Math.min(left,Math.max(0,gm-gs.length))):[];
+  const wnew=mode==='gram'?[]:buildQueue(n,now,budget-gnew.length).filter(c=>c.s==='learn').slice(0,left-gnew.length);
+  const q=due.concat(wnew.map(toW),gnew.map(toG));sess={q,i:0,mode,total:q.length};showCard();
+}
 const cur=()=>sess&&sess.q[sess.i]&&(sess.q[sess.i].c||(sess.q[sess.i].g&&S.gram[sess.q[sess.i].g]));
-function showCard(){const it=sess.q[sess.i],c=it&&it.c;$('card').classList.remove('flip');sess.done=false;
+function showCard(){const it=sess.q[sess.i],c=it&&it.c,st=it&&(c||(it.g&&S.gram[it.g]));if(st&&st.s==='learn'&&!st.seen&&newAllowance()<=0){sess.i++;return showCard()}$('card').classList.remove('flip');sess.done=false;
   const t=it?(it.g?'gram':it.t):'flash';$('card').hidden=t!=='flash';$('gradeRow').hidden=t!=='flash';$('pickBox').hidden=t!=='pick';$('typeBox').hidden=t!=='type';$('gramBox').hidden=t!=='gram';$('qNext').hidden=true;
   if(t==='gram'){$('pbar').style.width=(sess.i/sess.q.length*100)+'%';return showGram(it)}
   if(!c){celebrate('🎉 Xong rồi! Giỏi quá!');sess=null;return show('home')}
@@ -104,13 +114,14 @@ function answer(g){if(!sess)return;const c=cur();if(!c)return;const cd=$('card')
 function record(c,g,item){grade(c,g);
   if(g===0)sess.q.splice(Math.min(sess.q.length,sess.i+4),0,item&&item.g?{g:item.g,t:gType()}:{c,t:'flash',d:sess.q[sess.i]&&sess.q[sess.i].d});if(item&&item.g){G().gtotal=(G().gtotal||0)+1} // missed: see again soon in this session
   rollDay();S.doneCount++;
-  if(S.doneCount>=S.goal&&S.lastDay!==today()){const y=new Date(Date.now()-DAY).toLocaleDateString('en-CA');S.streak=S.lastDay===y?S.streak+1:(S.lastDay===today()?S.streak:1);S.lastDay=today();$('streak').textContent='🔥 '+S.streak;celebrate('🔥 Daily goal! Streak '+S.streak)}
-  else if(g===2&&c.s==='learned'&&c.lv===0)celebrate('🌟 Learned: '+(c.vi||(S.gdata&&S.gdata.points[c.id]||{}).pattern),false);
+  if(S.doneCount>=S.goal&&S.lastDay!==today()){const y=addDays(today(),-1);S.streak=S.lastDay===y?S.streak+1:(S.lastDay===today()?S.streak:1);S.lastDay=today();$('streak').textContent='🔥 '+S.streak;celebrate('🔥 Daily goal! Streak '+S.streak)}
+  if(g===2&&c.s==='learned'&&c.lv===0){const label=c.vi||(S.gdata&&S.gdata.points[c.id]||{}).pattern;setTimeout(()=>celebrate('🌟 Learned: '+label,false),180)}
   reward(g);save()}
+function wordSchedule(c){const stage=c.s==='learned'?'Learned':c.s==='practiced'?`Stage ${c.lv}/3`:'Stage 0/3';const next=isDue(c)?'Due today':new Date(c.due).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'});return stage+' · '+next}
 function renderWords(){document.querySelectorAll('#wtabs button').forEach(b=>b.classList.toggle('on',b.dataset.s===tab));
   const q=$('q').value.trim().toLowerCase(),f=s=>s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/g,'d');
   const list=cards().filter(c=>c.s===tab&&(!q||f(c.vi.toLowerCase()).includes(f(q))||c.en.toLowerCase().includes(q)));
-  $('wlist').innerHTML=(list.length?`<p class="muted">${list.length} words</p>`:`<div class="empty"><span class="e">${q?'🔍':EMO[tab]}</span><b>${q?'Không thấy từ nào!':'Nothing here yet!'}</b><br>${q?'Try another search ✨':'Practice a bit and words will bloom here 🌸'}</div>`)+list.slice(0,shown).map(c=>`<div class="row"><div><b>${esc(c.vi)}</b><small>${esc(c.en)}</small></div><button class="say" style="position:static" data-say="${esc(c.vi)}">🔊</button><select data-id="${c.id}">${Object.keys(NAMES).map(k=>`<option value="${k}"${k===c.s?' selected':''}>${k==='learn'?'To learn':k[0].toUpperCase()+k.slice(1)}</option>`).join('')}</select></div>`).join('');
+  $('wlist').innerHTML=(list.length?`<p class="muted">${list.length} words</p>`:`<div class="empty"><span class="e">${q?'🔍':EMO[tab]}</span><b>${q?'Không thấy từ nào!':'Nothing here yet!'}</b><br>${q?'Try another search ✨':'Practice a bit and words will bloom here 🌸'}</div>`)+list.slice(0,shown).map(c=>`<div class="row"><div><b>${esc(c.vi)}</b><small>${esc(c.en)}</small><small>${esc(wordSchedule(c))}</small></div><button class="say" style="position:static" data-say="${esc(c.vi)}">🔊</button><select data-id="${c.id}">${Object.keys(NAMES).map(k=>`<option value="${k}"${k===c.s?' selected':''}>${k==='learn'?'To learn':k[0].toUpperCase()+k.slice(1)}</option>`).join('')}</select></div>`).join('');
   $('more').style.display=list.length>shown?'':'none';
   $('wlist').querySelectorAll('select').forEach(s=>s.onchange=()=>{move(s.dataset.id,s.value);toast('Moved ✓');renderWords()});
   $('wlist').querySelectorAll('[data-say]').forEach(b=>b.onclick=()=>speak(b.dataset.say))}
@@ -174,7 +185,7 @@ function showGram(item){const p=S.gdata.points[item.g],it=p.items[Math.random()*
   ['gOpts','gFill','gReo','gBuild','gSelf','gRev'].forEach(id=>$(id).hidden=true);$('gPat').textContent='';$('gPrompt').textContent='';$('gSent').textContent='';
   let t=item.t;const words=it.vi.replace(/\[(.*?)\]/g,m=>m.replace(/ /g,'\u00a0')).split(' ');if(t==='reorder'&&(words.length<3||words.length>10||/ – /.test(it.vi)))t='choose';
   $('gLab').textContent={choose:'📐 Chọn mẫu đúng · Pick the pattern',fill:'📐 Điền từ còn thiếu · Fill the gap',reorder:'📐 Sắp xếp câu · Put the words in order',build:'📐 Đặt câu · Build a sentence'}[t];sess.gt=t;
-  if(t==='choose'){const parts=p.distractors.map(d=>d.split(/\s*…\s*/));let full=parts.every(x=>x.length===b.length)&&b.length>1;
+  if(t==='choose'){const parts=(p.distractors||[]).map(d=>d.split(/\s*…\s*/));let full=parts.every(x=>x.length===b.length)&&b.length>1;
     const right=full?b.join(' … '):b[0];let k=0;$('gSent').innerHTML=esc(it.vi).replace(/\[(.*?)\]/g,(m,x)=>(full||k++===0)?'<span class="gap">&nbsp;?&nbsp;</span>':esc(x));
     const opts=[right,...parts.map(x=>full?x.join(' … '):x[0])].filter((o,i,arr)=>arr.findIndex(z=>plain(z)===plain(o))===i).sort(()=>Math.random()-.5);
     $('gOpts').innerHTML=opts.map(o=>`<button data-o="${esc(o)}">${esc(o)}</button>`).join('');$('gOpts').hidden=false;
@@ -200,11 +211,11 @@ function renderGram(){const el=$('gList');if(!hasGram()){$('gSum').innerHTML='';
   el.innerHTML=S.gdata.groups.map(g=>{const ps=Object.values(S.gdata.points).filter(p=>p.group===g.n),c={learn:0,practiced:0,learned:0};ps.forEach(p=>c[(S.gram[p.id]||{}).s||'learn']++);
     const bar=['learned','practiced','learn'].map(k=>`<i class="${k}" style="width:${c[k]/ps.length*100}%"></i>`).join('');
     return `<details class="ggrp"><summary>${g.n}. ${esc(g.title)} <span class="muted">· ${c.learned}/${ps.length} learned</span><div class="gbar">${bar}</div></summary>`+ps.map(p=>`<div class="gpt"><div><b>${esc(p.pattern)}</b><small>${esc(p.explain)}</small></div><select data-g="${p.id}">${Object.keys(GS).map(k=>`<option value="${k}"${(S.gram[p.id]||{}).s===k?' selected':''}>${GS[k]}</option>`).join('')}</select></div>`).join('')+'</details>'}).join('');
-  el.querySelectorAll('select').forEach(s=>s.onchange=()=>{const st=S.gram[s.dataset.g];st.s=s.value;st.lv=s.value==='practiced'?1:0;st.due=Date.now()+(s.value==='learned'?LEARNED_IV0:0);save();toast('Moved ✓');renderGram()})}
+  el.querySelectorAll('select').forEach(s=>s.onchange=()=>{const st=S.gram[s.dataset.g];st.s=s.value;st.lv=s.value==='practiced'?1:0;st.due=s.value==='learned'?dueInDays(Date.now(),14):dueInDays(Date.now(),0);save();toast('Moved ✓');renderGram()})}
 // ---- new card types
 const plain=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[đĐ]/g,'d').toLowerCase().replace(/\(.*?\)/g,'').replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
 function lev(a,b){const m=a.length,n=b.length;let p=Array.from({length:n+1},(_,j)=>j);for(let i=1;i<=m;i++){const q=[i];for(let j=1;j<=n;j++)q[j]=Math.min(p[j]+1,q[j-1]+1,p[j-1]+(a[i-1]===b[j-1]?0:1));p=q}return p[n]}
-const answers=c=>c.vi.replace(/\(.*?\)/g,'').split(/[\/;,]/).map(s=>s.replace(/\.\.\.|…|\+/g,' ').trim()).filter(s=>s.length>1);
+const answers=c=>c.vi.replace(/\(.*?\)/g,'').split(/[\/;,]/).map(s=>s.replace(/\.\.\.|…|\+/g,' ').trim()).filter(s=>s.length>0);
 const sylls=s=>plain(s).split(' ').filter(Boolean).length;
 function distractors(c){const all=cards(),idx=all.indexOf(c),want=sylls(c.sent.blank),bad=new Set([plain(c.sent.blank),...answers(c).map(plain)]);
   const ok=w=>w!==c&&!/\.\.\.|…|\+|\//.test(w.vi)&&!bad.has(plain(answers(w)[0]||''))&&answers(w)[0];
@@ -221,8 +232,8 @@ function showPick(c){const s=c.sent;$('pSent').innerHTML=esc(s.vi).replace(esc(s
     const r=$('pRev');r.className='reveal '+(right?'ok':'no');r.innerHTML=(right?'🎉 Đúng rồi! ':'💭 Not quite — ')+'<br>'+revealHTML(c);r.hidden=false;finishQ('pickBox',right?2:0)})}
 function showType(c){sess.hint=false;$('tEn').textContent=c.en;$('tIn').value='';$('tIn').disabled=false;$('tRev').hidden=true;$('tCheck').hidden=false;$('tHint').disabled=$('tShow').disabled=false;setTimeout(()=>{try{$('tIn').focus()}catch(e){}},50)}
 function typeResult(kind){const c=cur(),r=$('tRev'),ans=answers(c);$('tIn').disabled=true;$('tCheck').hidden=true;$('tHint').disabled=$('tShow').disabled=true;
-  const g=kind==='ok'?(sess.hint?1:2):kind==='close'?1:0;
-  const msg={ok:sess.hint?'👍 Đúng rồi (with a hint)':'🎉 Chính xác!',close:'🤏 Gần đúng! Check the spelling:',no:'💭 The answer is:',shown:'👀 The answer is:'}[kind];
+  const g=kind==='ok'?(sess.hint?1:2):(kind==='close'||kind==='shown')?1:0;
+  const msg={ok:sess.hint?'👍 Đúng rồi (with a hint)':'🎉 Chính xác!',close:'🤏 Gần đúng! Check the spelling:',no:'💭 The answer is:',shown:'👀 Answer shown — retry tomorrow (progress kept):'}[kind];
   r.className='reveal '+(kind==='ok'?'ok':kind==='close'?'close':'no');r.innerHTML=`${msg}<br><b class="hl">${esc(c.vi)}</b> <button class="say" data-say="${esc(ans[0]||c.vi)}">🔊</button>`+(c.sent?`<br><small>${esc(c.sent.vi)}</small>`:'');r.hidden=false;finishQ('typeBox',g)}
 function checkType(){if(sess.done)return;const v=plain($('tIn').value);if(!v)return toast('Type your answer ✏️');const ans=answers(cur()).map(plain);
   if(ans.includes(v))return typeResult('ok');const d=Math.min(...ans.map(a=>lev(v,a)));const tol=Math.max(...ans.map(a=>a.length))>6?2:1;typeResult(d<=tol?'close':'no')}
@@ -241,7 +252,7 @@ function init(){if(inited)return renderHome();inited=true;show('home');
   $('say1').onclick=$('say2').onclick=()=>cur()&&speak(cur().vi);
   document.querySelectorAll('.grade button[data-g]').forEach(b=>b.onclick=()=>answer(+b.dataset.g));
   let sx,sy;const cd=$('card');cd.addEventListener('touchstart',e=>{sx=e.touches[0].clientX;sy=e.touches[0].clientY},{passive:true});
-  cd.addEventListener('touchend',e=>{const dx=e.changedTouches[0].clientX-sx,dy=e.changedTouches[0].clientY-sy;if(Math.abs(dx)>70&&Math.abs(dx)>Math.abs(dy))answer(dx>0?2:0);else if(dy<-70)answer(1)});
+  cd.addEventListener('touchend',e=>{const dx=e.changedTouches[0].clientX-sx,dy=e.changedTouches[0].clientY-sy;if(Math.abs(dx)>70&&Math.abs(dx)>Math.abs(dy))answer(dx>0?2:0);});
   document.querySelectorAll('#wtabs button').forEach(b=>b.onclick=()=>{tab=b.dataset.s;shown=60;renderWords()});
   $('q').oninput=()=>{shown=60;renderWords()};$('more').onclick=()=>{shown+=100;renderWords()};
   $('addBtn').onclick=()=>{const vi=$('nvi').value.trim(),en=$('nen').value.trim();if(!vi||!en)return toast('Need word + meaning');const id='u'+Date.now().toString(36);
@@ -251,11 +262,11 @@ function init(){if(inited)return renderHome();inited=true;show('home');
   $('expBtn').onclick=()=>{const b=new Blob([JSON.stringify(S)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='tuvung-backup-'+today()+'.json';a.click()};
   $('impBtn').onclick=()=>$('impFile').click();
   $('impFile').onchange=e=>e.target.files[0]&&handleFile(e.target.files[0],false);
-  $('impBtn').textContent=Object.keys(S.cards).length?'🔄 Update words (keeps your progress)':'📥 Import word list / backup';$('ver').textContent='Offline-ready · '+cards().length+' words';
+  $('impBtn').textContent=Object.keys(S.cards).length?'🔄 Update words (keeps your progress)':'📥 Import word list / backup';$('ver').textContent='Offline-ready · v10 · '+cards().length+' words';
   renderHome();
 }
 function welcome(){document.body.classList.add('welcome');$('v-welcome').classList.add('on')}
-async function handleFile(file,fromWelcome){try{if(!fromWelcome&&S&&Object.keys(S.cards).length&&/^\s*\{\s*"v"/.test((await file.slice(0,40).text()))&&!confirm('This is a progress backup and will REPLACE your current progress. Continue?'))return;const r=importText(await file.text(),file.name);toast(r==='progress'?'Progress restored ✓':(`🌸 +${r.added} new · ${r.updated} updated`+(r.gram?` · 📐 ${r.gram.points} grammar`:'')));confetti(120);
+async function handleFile(file,fromWelcome){try{const text=await file.text();if(!fromWelcome&&S&&Object.keys(S.cards).length&&parseWords(text,file.name).progress&&!confirm('This is a progress backup and will REPLACE your current progress. Continue?'))return;const r=importText(text,file.name);toast(r==='progress'?'Progress restored ✓':(`🌸 +${r.added} new · ${r.updated} updated`+(r.gram?` · 📐 ${r.gram.points} grammar`:'')));confetti(120);
   if(fromWelcome){document.body.classList.remove('welcome');$('v-welcome').classList.remove('on');init()}else show('home')}catch(e){toast('Hmm, that file didn\'t work 🙈')}}
 let inited=false;
 // Crash-loop guard: if the last start never reached "stable", switch to safe mode next time and offer recovery.
@@ -274,4 +285,4 @@ function boot(){try{
   S?init():welcome()}catch(e){console.error(e);recovery(e)}}
 load().then(boot,e=>{console.error(e);recovery(e)});
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').then(r=>r.update()).catch(()=>{});
-window.__app={flashDir,get sess(){return sess},showCard,startSession,gramQueue,mergeGrammar,checkStreak,level,renderHome,saveNow,mergeWords,pickType,plain,lev,buildQueue,grade,get S(){return S},PRAC_IV,LEARNED_IV0};
+window.__app={flashDir,get sess(){return sess},showCard,startSession,gramQueue,mergeGrammar,checkStreak,level,renderHome,saveNow,mergeWords,pickType,plain,lev,buildQueue,grade,get S(){return S},isDue,dueInDays,endOfDay,PRAC_IV,LEARNED_IV0};
